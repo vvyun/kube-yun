@@ -424,6 +424,21 @@ button[type="submit"]:hover {
     background-color: #2980b9;
 }
 
+.scale-btn {
+    background-color: #9b59b6;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-left: 5px;
+}
+
+.scale-btn:hover {
+    background-color: #8e44ad;
+}
+
 /* 批量更新镜像样式 */
 .batch-update-container {
     margin: 20px 0;

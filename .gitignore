@@ -4,3 +4,4 @@
 .clusters.yaml
 # 加密密钥文件（重要！丢失后无法解密）
 .crypto.key
+*.pyc

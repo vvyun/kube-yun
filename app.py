@@ -278,5 +278,37 @@ def search_deployments_by_image(cluster_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/clusters/<cluster_id>/deployments/<deployment_name>/scale', methods=['POST'])
+def scale_deployment(cluster_id, deployment_name):
+    """伸缩容器副本数"""
+    namespace = request.args.get('namespace', 'default')
+    data = request.json
+    replicas = data.get('replicas')
+
+    if cluster_id not in clusters:
+        return jsonify({"error": "Cluster not found"}), 404
+
+    if replicas is None:
+        return jsonify({"error": "Replicas is required"}), 400
+
+    try:
+        replicas = int(replicas)
+        if replicas < 0:
+            return jsonify({"error": "Replicas must be non-negative"}), 400
+    except ValueError:
+        return jsonify({"error": "Replicas must be a number"}), 400
+
+    cluster = clusters[cluster_id]
+    try:
+        client = K8sClientSvc(
+            namespace=namespace,
+            ssh_config=cluster['ssh_config']
+        )
+        result = client.scale_deployment(namespace, deployment_name, replicas)
+        return jsonify({"success": True, "result": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

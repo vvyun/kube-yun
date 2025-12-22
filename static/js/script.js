@@ -126,6 +126,11 @@ function bindEventListeners() {
     document.getElementById('close-batch-update').addEventListener('click', closeBatchUpdateImageModal);
     document.querySelector('#batch-update-image-modal .close').addEventListener('click', closeBatchUpdateImageModal);
     document.getElementById('search-deployments-btn').addEventListener('click', searchDeploymentsByImage);
+    
+    // 容器伸缩模态框事件
+    document.getElementById('cancel-scale').addEventListener('click', closeScaleDeploymentModal);
+    document.querySelector('#scale-deployment-modal .close').addEventListener('click', closeScaleDeploymentModal);
+    document.getElementById('scale-deployment-form').addEventListener('submit', scaleDeployment);
 }
 
 // 加载集群列表
@@ -501,6 +506,8 @@ function renderCurrentPage(tabType) {
                 
                 // 添加操作按钮
                 const actionCell = row.insertCell();
+                
+                // 更新镜像按钮
                 const updateBtn = document.createElement('button');
                 updateBtn.textContent = '更新镜像';
                 updateBtn.className = 'update-btn';
@@ -508,6 +515,15 @@ function renderCurrentPage(tabType) {
                     showUpdateImageModal(item.NAME || '');
                 };
                 actionCell.appendChild(updateBtn);
+                
+                // 容器伸缩按钮
+                const scaleBtn = document.createElement('button');
+                scaleBtn.textContent = '容器伸缩';
+                scaleBtn.className = 'scale-btn';
+                scaleBtn.onclick = function() {
+                    showScaleDeploymentModal(item.NAME || '', item.READY || '');
+                };
+                actionCell.appendChild(scaleBtn);
                 break;
             case 'services':
                 row.insertCell().textContent = item.NAME || '';
@@ -886,5 +902,69 @@ function updateDeploymentImageFromBatch(deploymentName, imageName) {
     .catch(error => {
         console.error('更新镜像失败:', error);
         showToast('更新镜像失败', 'error');
+    });
+}
+
+// 容器伸缩相关功能
+// 显示容器伸缩模态框
+function showScaleDeploymentModal(deploymentName, readyStatus) {
+    document.getElementById('scale-deployment-name').value = deploymentName;
+    
+    // 从 READY 状态中解析当前副本数 (例如 "2/3" 表示当前 2 个，期望 3 个)
+    let currentReplicas = 0;
+    if (readyStatus && readyStatus.includes('/')) {
+        currentReplicas = parseInt(readyStatus.split('/')[1]) || 0;
+    }
+    
+    document.getElementById('current-replicas').value = currentReplicas;
+    document.getElementById('target-replicas').value = currentReplicas;
+    document.getElementById('scale-deployment-modal').style.display = 'block';
+}
+
+// 关闭容器伸缩模态框
+function closeScaleDeploymentModal() {
+    document.getElementById('scale-deployment-modal').style.display = 'none';
+}
+
+// 执行容器伸缩
+function scaleDeployment(event) {
+    event.preventDefault();
+    
+    const deploymentName = document.getElementById('scale-deployment-name').value;
+    const targetReplicas = parseInt(document.getElementById('target-replicas').value);
+    
+    if (!currentCluster) {
+        showToast('未选择集群', 'warning');
+        return;
+    }
+    
+    if (isNaN(targetReplicas) || targetReplicas < 0) {
+        showToast('请输入有效的副本数', 'warning');
+        return;
+    }
+    
+    const namespace = document.getElementById('namespace-select').value;
+    
+    fetch(`/api/clusters/${currentCluster}/deployments/${deploymentName}/scale?namespace=${namespace}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ replicas: targetReplicas })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            closeScaleDeploymentModal();
+            showToast(`容器伸缩成功，目标副本数: ${targetReplicas}`, 'success');
+            // 重新加载工作负载数据
+            loadTabData('deployments');
+        } else {
+            showToast('容器伸缩失败: ' + result.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('容器伸缩失败:', error);
+        showToast('容器伸缩失败', 'error');
     });
 }

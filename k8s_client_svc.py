@@ -77,6 +77,18 @@ class K8sClientSvc:
             ns = self.namespace
         return self.client.get_deployment_images(ns)
 
+    def scale_deployment(self, ns: str = None, deploy_name: str = None, replicas: int = None) -> str:
+        """
+        伸缩容器副本数
+        """
+        if ns is None:
+            ns = self.namespace
+        if not deploy_name:
+            raise Exception("deploy_name 非空")
+        if replicas is None:
+            raise Exception("replicas 非空")
+        return self.client.scale_deployment(ns, deploy_name, replicas)
+
 
 def convert2map(res: dict) -> list[dict]:
     if not res["success"]:
@@ -154,6 +166,14 @@ class SshK8sClient:
         shell_cmd = f"""kubectl get deployments -n {ns} -o custom-columns=NAME:.metadata.name,IMAGES:.spec.template.spec.containers[*].image"""
         result = self.ssh_client.execute_command(shell_cmd)
         return convert2map(result)
+
+    def scale_deployment(self, ns: str = None, deploy_name: str = None, replicas: int = None) -> str:
+        """
+        伸缩容器副本数
+        """
+        shell_cmd = f"""kubectl scale deployment/{deploy_name} --replicas={replicas} -n {ns}"""
+        result = self.ssh_client.execute_command(shell_cmd)
+        return result["output"]
 
 
 if __name__ == "__main__":
