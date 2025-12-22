@@ -267,7 +267,7 @@ function renderClusterList(clusters, options = {}) {
         
         const nsTag = document.createElement('span');
         nsTag.className = 'cluster-tag';
-        nsTag.textContent = `命名空间 ${cluster.namespace || 'default'}`;
+        nsTag.textContent = `${cluster.namespace || 'default'}`;
         
         meta.appendChild(nsTag);
         infoDiv.appendChild(title);
