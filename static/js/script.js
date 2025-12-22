@@ -1,6 +1,12 @@
 // 当前选中的集群
 let currentCluster = null;
 
+// 本地存储key
+const CLUSTER_STORAGE_KEY = 'k8s-manage:lastClusterId';
+
+// 集群缓存（用于搜索和快速重绘）
+let clusterCache = [];
+
 // 分页配置
 const pagination = {
     deployments: { currentPage: 1, pageSize: 10, totalPages: 0, allData: [], filteredData: [] },
@@ -64,6 +70,18 @@ document.addEventListener('DOMContentLoaded', function() {
 function bindEventListeners() {
     // 添加集群按钮
     document.getElementById('add-cluster-btn').addEventListener('click', showAddClusterModal);
+    const emptyAddBtn = document.getElementById('empty-add-cluster-btn');
+    if (emptyAddBtn) {
+        emptyAddBtn.addEventListener('click', showAddClusterModal);
+    }
+    const refreshBtn = document.getElementById('refresh-clusters-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => loadClusters(true));
+    }
+    const clusterSearchInput = document.getElementById('cluster-search-input');
+    if (clusterSearchInput) {
+        clusterSearchInput.addEventListener('input', filterClusterList);
+    }
     
     // 关闭模态框
     document.querySelector('.close').addEventListener('click', closeAddClusterModal);
@@ -139,85 +157,19 @@ function bindEventListeners() {
 }
 
 // 加载集群列表
-function loadClusters() {
+function loadClusters(showToastMessage = false) {
     fetch('/api/clusters')
         .then(response => response.json())
         .then(clusters => {
-            const clusterList = document.getElementById('cluster-list');
-            clusterList.innerHTML = '';
-            
-            clusters.forEach(cluster => {
-                const li = document.createElement('li');
-                li.className = 'cluster-item';
-                li.dataset.clusterId = cluster.name.toLowerCase().replace(' ', '-');
-                
-                // 创建集群名称显示元素
-                const nameSpan = document.createElement('span');
-                nameSpan.className = 'cluster-name';
-                nameSpan.textContent = cluster.name;
-                
-                // 创建操作按钮
-                const actionsDiv = document.createElement('div');
-                actionsDiv.className = 'cluster-actions';
-                
-                // 创建操作按钮
-                const actionsBtn = document.createElement('button');
-                actionsBtn.className = 'actions-btn';
-                actionsBtn.innerHTML = '⋯';
-                actionsBtn.title = '操作';
-                
-                // 创建下拉菜单
-                const dropdown = document.createElement('div');
-                dropdown.className = 'dropdown-menu';
-                dropdown.style.display = 'none';
-                
-                // 重命名选项
-                const renameOption = document.createElement('div');
-                renameOption.className = 'dropdown-option';
-                renameOption.textContent = '重命名';
-                renameOption.onclick = function(e) {
-                    e.stopPropagation();
-                    hideAllDropdowns();
-                    editClusterName(cluster.name, li);
-                };
-                
-                // 删除选项
-                const deleteOption = document.createElement('div');
-                deleteOption.className = 'dropdown-option';
-                deleteOption.textContent = '删除';
-                deleteOption.onclick = function(e) {
-                    e.stopPropagation();
-                    hideAllDropdowns();
-                    showDeleteClusterModal(cluster.name);
-                };
-                
-                dropdown.appendChild(renameOption);
-                dropdown.appendChild(deleteOption);
-                
-                // 切换下拉菜单显示
-                actionsBtn.onclick = function(e) {
-                    e.stopPropagation();
-                    // 隐藏其他下拉菜单
-                    hideAllDropdowns();
-                    // 切换当前菜单
-                    dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
-                };
-                
-                actionsDiv.appendChild(actionsBtn);
-                actionsDiv.appendChild(dropdown);
-                
-                li.appendChild(nameSpan);
-                li.appendChild(actionsDiv);
-                
-                li.addEventListener('click', function() {
-                    selectCluster(li.dataset.clusterId);
-                });
-                clusterList.appendChild(li);
-            });
-            
-            // 默认选中第一个集群
-            if (clusters.length > 0) {
-                selectCluster(clusters[0].name.toLowerCase().replace(' ', '-'));
+            clusterCache = Array.isArray(clusters) ? clusters : [];
+            const searchInput = document.getElementById('cluster-search-input');
+            if (searchInput && searchInput.value.trim()) {
+                filterClusterList();
+            } else {
+                renderClusterList(clusterCache, { autoSelect: true });
+            }
+            if (showToastMessage) {
+                showToast('集群列表已刷新', 'success');
             }
         })
         .catch(error => {
@@ -227,17 +179,169 @@ function loadClusters() {
 }
 
 // 选择集群
-function selectCluster(clusterId) {
+function selectCluster(clusterId, options = {}) {
+    const { suppressLoad = false, forceReload = false } = options;
     // 更新UI选中状态
     document.querySelectorAll('.cluster-item').forEach(item => {
         item.classList.remove('active');
     });
-    document.querySelector(`.cluster-item[data-cluster-id="${clusterId}"]`).classList.add('active');
+    const targetItem = document.querySelector(`.cluster-item[data-cluster-id="${clusterId}"]`);
+    if (!targetItem) {
+        currentCluster = null;
+        return;
+    }
+    targetItem.classList.add('active');
     
+    const isSameCluster = currentCluster === clusterId;
     currentCluster = clusterId;
+    localStorage.setItem(CLUSTER_STORAGE_KEY, clusterId);
     
     // 加载命名空间
-    loadNamespaces(clusterId);
+    if (!suppressLoad && (!isSameCluster || forceReload)) {
+        loadNamespaces(clusterId);
+    }
+}
+
+// 正规化集群ID（与后端保持一致）
+function normalizeClusterId(name) {
+    return (name || '').toLowerCase().replace(/\s+/g, '-');
+}
+
+function getPreferredClusterId(clusters, fallbackToFirst = true) {
+    if (!Array.isArray(clusters) || clusters.length === 0) return null;
+    const stored = localStorage.getItem(CLUSTER_STORAGE_KEY);
+    const validIds = clusters.map(c => normalizeClusterId(c.name));
+    if (stored && validIds.includes(stored)) return stored;
+    if (currentCluster && validIds.includes(currentCluster)) return currentCluster;
+    return fallbackToFirst ? validIds[0] : null;
+}
+
+function renderClusterList(clusters, options = {}) {
+    const { autoSelect = false, isFiltered = false } = options;
+    const clusterList = document.getElementById('cluster-list');
+    const emptyState = document.getElementById('cluster-empty-state');
+    clusterList.innerHTML = '';
+    
+    if (!clusters || clusters.length === 0) {
+        clusterList.style.display = 'none';
+        if (emptyState) {
+            emptyState.style.display = 'block';
+            const text = emptyState.querySelector('p');
+            if (text) {
+                text.textContent = isFiltered ? '未找到匹配的集群' : '暂无集群，请先创建一个集群';
+            }
+        }
+        return;
+    }
+    clusterList.style.display = 'block';
+    if (emptyState) {
+        emptyState.style.display = 'none';
+        const text = emptyState.querySelector('p');
+        if (text) {
+            text.textContent = '暂无集群，请先创建一个集群';
+        }
+    }
+    
+    const preferredId = getPreferredClusterId(clusters, autoSelect);
+    
+    clusters.forEach(cluster => {
+        const clusterId = normalizeClusterId(cluster.name);
+        const li = document.createElement('li');
+        li.className = 'cluster-item';
+        li.dataset.clusterId = clusterId;
+        li.dataset.clusterName = cluster.name || '';
+        
+        const avatar = document.createElement('div');
+        avatar.className = 'cluster-avatar';
+        avatar.textContent = (cluster.name || '?').slice(0, 2).toUpperCase();
+        
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'cluster-info';
+        
+        const title = document.createElement('div');
+        title.className = 'cluster-title';
+        title.textContent = cluster.name || '未命名集群';
+        
+        const meta = document.createElement('div');
+        meta.className = 'cluster-meta';
+        
+        const nsTag = document.createElement('span');
+        nsTag.className = 'cluster-tag';
+        nsTag.textContent = `命名空间 ${cluster.namespace || 'default'}`;
+        
+        meta.appendChild(nsTag);
+        infoDiv.appendChild(title);
+        infoDiv.appendChild(meta);
+        
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'cluster-actions';
+        
+        const actionsBtn = document.createElement('button');
+        actionsBtn.className = 'actions-btn';
+        actionsBtn.innerHTML = '⋯';
+        actionsBtn.title = '操作';
+        
+        const dropdown = document.createElement('div');
+        dropdown.className = 'dropdown-menu';
+        dropdown.style.display = 'none';
+        
+        const renameOption = document.createElement('div');
+        renameOption.className = 'dropdown-option';
+        renameOption.textContent = '重命名';
+        renameOption.onclick = function(e) {
+            e.stopPropagation();
+            hideAllDropdowns();
+            promptRenameCluster(cluster.name);
+        };
+        
+        const deleteOption = document.createElement('div');
+        deleteOption.className = 'dropdown-option';
+        deleteOption.textContent = '删除';
+        deleteOption.onclick = function(e) {
+            e.stopPropagation();
+            hideAllDropdowns();
+            showDeleteClusterModal(cluster.name);
+        };
+        
+        dropdown.appendChild(renameOption);
+        dropdown.appendChild(deleteOption);
+        
+        actionsBtn.onclick = function(e) {
+            e.stopPropagation();
+            hideAllDropdowns();
+            dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+        };
+        
+        actionsDiv.appendChild(actionsBtn);
+        actionsDiv.appendChild(dropdown);
+        
+        li.appendChild(avatar);
+        li.appendChild(infoDiv);
+        li.appendChild(actionsDiv);
+        
+        li.addEventListener('click', function() {
+            selectCluster(li.dataset.clusterId);
+        });
+        clusterList.appendChild(li);
+    });
+    
+    const targetId = preferredId || (autoSelect && clusters.length > 0 ? normalizeClusterId(clusters[0].name) : null);
+    if (targetId) {
+        selectCluster(targetId, { suppressLoad: !autoSelect });
+    }
+}
+
+function filterClusterList() {
+    const keyword = document.getElementById('cluster-search-input').value.trim().toLowerCase();
+    if (!keyword) {
+        renderClusterList(clusterCache, { autoSelect: false });
+        return;
+    }
+    const filtered = clusterCache.filter(cluster => {
+        if (!cluster || !cluster.name) return false;
+        return cluster.name.toLowerCase().includes(keyword);
+    });
+    renderClusterList(filtered, { autoSelect: false, isFiltered: true });
 }
 
 // 加载命名空间
@@ -310,6 +414,7 @@ function addCluster(event) {
     .then(result => {
         if (result.success) {
             closeAddClusterModal();
+            localStorage.setItem(CLUSTER_STORAGE_KEY, normalizeClusterId(clusterData.name));
             loadClusters(); // 重新加载集群列表
             showToast('集群添加成功', 'success');
         } else {
@@ -1032,98 +1137,25 @@ function scaleDeployment(event) {
     });
 }
 
-// 编辑集群名称相关功能
-function editClusterName(clusterName, listItem) {
-    // 获取集群名称元素和编辑图标
-    const nameSpan = listItem.querySelector('.cluster-name');
-    const editIcon = listItem.querySelector('.edit-icon');
+// 编辑/重命名集群
+function promptRenameCluster(oldName) {
+    const newName = prompt('请输入新的集群名称', oldName || '');
+    if (newName === null) return; // 用户取消
     
-    // 保存原始名称
-    const originalName = nameSpan.textContent;
-    
-    // 创建输入框
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.value = originalName;
-    input.className = 'cluster-name-input';
-    
-    // 创建保存按钮
-    const saveBtn = document.createElement('button');
-    saveBtn.textContent = '保存';
-    saveBtn.className = 'save-btn';
-    
-    // 替换显示元素为输入框和保存按钮
-    listItem.replaceChild(input, nameSpan);
-    listItem.insertBefore(saveBtn, editIcon);
-    
-    // 隐藏编辑图标
-    editIcon.style.display = 'none';
-    
-    // 聚焦到输入框
-    input.focus();
-    
-    // 绑定保存事件
-    saveBtn.onclick = function() {
-        const newName = input.value.trim();
-        
-        if (!newName) {
-            showToast('集群名称不能为空', 'warning');
-            return;
-        }
-        
-        if (newName === originalName) {
-            // 名称未改变，直接取消编辑
-            cancelEditClusterName(listItem, originalName, editIcon);
-            return;
-        }
-        
-        // 调用API更新集群名称
-        updateClusterName(originalName, newName, listItem, editIcon);
-    };
-    
-    // 绑定回车键事件
-    input.onkeypress = function(e) {
-        if (e.key === 'Enter') {
-            saveBtn.click();
-        }
-    };
-    
-    // 绑定失去焦点事件（可选，用户可以根据需要决定是否启用）
-    /*
-    input.onblur = function() {
-        // 延迟执行，确保点击保存按钮的事件先触发
-        setTimeout(() => {
-            if (document.contains(listItem)) {
-                cancelEditClusterName(listItem, originalName, editIcon);
-            }
-        }, 200);
-    };
-    */
+    const trimmed = newName.trim();
+    if (!trimmed) {
+        showToast('集群名称不能为空', 'warning');
+        return;
+    }
+    if (trimmed === oldName) {
+        showToast('集群名称未变化', 'info');
+        return;
+    }
+    updateClusterName(oldName, trimmed);
 }
 
-function cancelEditClusterName(listItem, originalName, editIcon) {
-    // 恢复原始显示
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'cluster-name';
-    nameSpan.textContent = originalName;
-    
-    // 移除输入框和保存按钮
-    const input = listItem.querySelector('input');
-    const saveBtn = listItem.querySelector('.save-btn');
-    
-    if (input) listItem.removeChild(input);
-    if (saveBtn) listItem.removeChild(saveBtn);
-    
-    // 恢复编辑图标
-    editIcon.style.display = '';
-    
-    // 插入名称显示元素
-    listItem.insertBefore(nameSpan, editIcon);
-}
-
-function updateClusterName(oldName, newName, listItem, editIcon) {
-    // 构造集群ID（与后端保持一致）
-    const clusterId = oldName.toLowerCase().replace(' ', '-');
+function updateClusterName(oldName, newName) {
+    const clusterId = normalizeClusterId(oldName);
     
     fetch(`/api/clusters/${clusterId}`, {
         method: 'PUT',
@@ -1136,44 +1168,18 @@ function updateClusterName(oldName, newName, listItem, editIcon) {
     .then(result => {
         if (result.success) {
             showToast('集群名称更新成功', 'success');
-            
-            // 更新显示
-            const nameSpan = document.createElement('span');
-            nameSpan.className = 'cluster-name';
-            nameSpan.textContent = newName;
-            
-            // 移除输入框和保存按钮
-            const input = listItem.querySelector('input');
-            const saveBtn = listItem.querySelector('.save-btn');
-            
-            if (input) listItem.removeChild(input);
-            if (saveBtn) listItem.removeChild(saveBtn);
-            
-            // 恢复编辑图标
-            editIcon.style.display = '';
-            
-            // 插入新名称
-            listItem.insertBefore(nameSpan, editIcon);
-            
-            // 更新data属性
-            listItem.dataset.clusterId = newName.toLowerCase().replace(' ', '-');
-            
-            // 如果当前选中的集群是这个集群，更新currentCluster变量
+            localStorage.setItem(CLUSTER_STORAGE_KEY, normalizeClusterId(newName));
             if (currentCluster === clusterId) {
-                currentCluster = newName.toLowerCase().replace(' ', '-');
+                currentCluster = normalizeClusterId(newName);
             }
-            
-            // 重新加载集群列表以确保一致性
             loadClusters();
         } else {
             showToast('集群名称更新失败: ' + (result.error || ''), 'error');
-            cancelEditClusterName(listItem, oldName, editIcon);
         }
     })
     .catch(error => {
         console.error('更新集群名称失败:', error);
         showToast('更新集群名称失败', 'error');
-        cancelEditClusterName(listItem, oldName, editIcon);
     });
 }
 
@@ -1219,6 +1225,13 @@ function confirmDeleteCluster() {
         if (result.success) {
             closeDeleteClusterModal();
             showToast(`集群 ${clusterToDelete} 已成功删除`, 'success');
+            const removedId = normalizeClusterId(clusterToDelete);
+            if (localStorage.getItem(CLUSTER_STORAGE_KEY) === removedId) {
+                localStorage.removeItem(CLUSTER_STORAGE_KEY);
+            }
+            if (currentCluster === removedId) {
+                currentCluster = null;
+            }
             // 重新加载集群列表
             loadClusters();
         } else {

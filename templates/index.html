@@ -10,11 +10,26 @@
     <div class="container">
         <!-- 左侧集群列表 -->
         <div class="sidebar">
-            <h3>集群列表</h3>
-            <ul id="cluster-list">
+            <div class="sidebar-header">
+                <div>
+                    <h3>集群列表</h3>
+                    <p class="sidebar-subtitle">选择集群并进行管理</p>
+                </div>
+                <div class="sidebar-actions">
+                    <button id="refresh-clusters-btn" class="icon-btn" title="刷新集群">⟳</button>
+                    <button id="add-cluster-btn" class="add-btn" title="添加集群">+</button>
+                </div>
+            </div>
+            <div class="cluster-search">
+                <input type="text" id="cluster-search-input" placeholder="搜索集群...">
+            </div>
+            <ul id="cluster-list" class="cluster-list">
                 <!-- 集群项将通过JS动态添加 -->
             </ul>
-            <button id="add-cluster-btn" class="add-btn">+</button>
+            <div id="cluster-empty-state" class="empty-state" style="display: none;">
+                <p>暂无集群，请先创建一个集群</p>
+                <button id="empty-add-cluster-btn" class="add-btn" title="添加集群">+</button>
+            </div>
         </div>
 
         <!-- 主内容区 -->
