@@ -310,5 +310,40 @@ def scale_deployment(cluster_id, deployment_name):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/clusters/<cluster_id>', methods=['PUT'])
+def update_cluster(cluster_id):
+    """更新集群信息"""
+    data = request.json
+    new_name = data.get('name')
+    
+    if cluster_id not in clusters:
+        return jsonify({"error": "Cluster not found"}), 404
+    
+    if not new_name:
+        return jsonify({"error": "Cluster name is required"}), 400
+    
+    # 更新集群名称
+    cluster = clusters[cluster_id]
+    old_name = cluster['name']
+    cluster['name'] = new_name
+    
+    # 如果集群ID是根据旧名称生成的，也需要更新
+    if cluster_id == old_name:
+        new_cluster_id = new_name
+        clusters[new_cluster_id] = cluster
+        del clusters[cluster_id]
+    
+    # 保存到文件
+    if save_clusters(clusters):
+        return jsonify({"success": True, "cluster_id": cluster_id})
+    else:
+        # 回滚更改
+        cluster['name'] = old_name
+        if cluster_id == old_name:
+            clusters[cluster_id] = cluster
+            del clusters[new_cluster_id]
+        return jsonify({"success": False, "error": "保存集群配置失败"}), 500
+
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

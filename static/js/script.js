@@ -144,8 +144,26 @@ function loadClusters() {
             clusters.forEach(cluster => {
                 const li = document.createElement('li');
                 li.className = 'cluster-item';
-                li.textContent = cluster.name;
                 li.dataset.clusterId = cluster.name.toLowerCase().replace(' ', '-');
+                
+                // 创建集群名称显示元素
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'cluster-name';
+                nameSpan.textContent = cluster.name;
+                
+                // 创建编辑图标
+                const editIcon = document.createElement('span');
+                editIcon.className = 'edit-icon';
+                editIcon.innerHTML = '✏️';
+                editIcon.title = '编辑集群名称';
+                editIcon.onclick = function(e) {
+                    e.stopPropagation();
+                    editClusterName(cluster.name, li);
+                };
+                
+                li.appendChild(nameSpan);
+                li.appendChild(editIcon);
+                
                 li.addEventListener('click', function() {
                     selectCluster(li.dataset.clusterId);
                 });
@@ -966,5 +984,150 @@ function scaleDeployment(event) {
     .catch(error => {
         console.error('容器伸缩失败:', error);
         showToast('容器伸缩失败', 'error');
+    });
+}
+
+// 编辑集群名称相关功能
+function editClusterName(clusterName, listItem) {
+    // 获取集群名称元素和编辑图标
+    const nameSpan = listItem.querySelector('.cluster-name');
+    const editIcon = listItem.querySelector('.edit-icon');
+    
+    // 保存原始名称
+    const originalName = nameSpan.textContent;
+    
+    // 创建输入框
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = originalName;
+    input.className = 'cluster-name-input';
+    
+    // 创建保存按钮
+    const saveBtn = document.createElement('button');
+    saveBtn.textContent = '保存';
+    saveBtn.className = 'save-btn';
+    
+    // 替换显示元素为输入框和保存按钮
+    listItem.replaceChild(input, nameSpan);
+    listItem.insertBefore(saveBtn, editIcon);
+    
+    // 隐藏编辑图标
+    editIcon.style.display = 'none';
+    
+    // 聚焦到输入框
+    input.focus();
+    
+    // 绑定保存事件
+    saveBtn.onclick = function() {
+        const newName = input.value.trim();
+        
+        if (!newName) {
+            showToast('集群名称不能为空', 'warning');
+            return;
+        }
+        
+        if (newName === originalName) {
+            // 名称未改变，直接取消编辑
+            cancelEditClusterName(listItem, originalName, editIcon);
+            return;
+        }
+        
+        // 调用API更新集群名称
+        updateClusterName(originalName, newName, listItem, editIcon);
+    };
+    
+    // 绑定回车键事件
+    input.onkeypress = function(e) {
+        if (e.key === 'Enter') {
+            saveBtn.click();
+        }
+    };
+    
+    // 绑定失去焦点事件（可选，用户可以根据需要决定是否启用）
+    /*
+    input.onblur = function() {
+        // 延迟执行，确保点击保存按钮的事件先触发
+        setTimeout(() => {
+            if (document.contains(listItem)) {
+                cancelEditClusterName(listItem, originalName, editIcon);
+            }
+        }, 200);
+    };
+    */
+}
+
+function cancelEditClusterName(listItem, originalName, editIcon) {
+    // 恢复原始显示
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'cluster-name';
+    nameSpan.textContent = originalName;
+    
+    // 移除输入框和保存按钮
+    const input = listItem.querySelector('input');
+    const saveBtn = listItem.querySelector('.save-btn');
+    
+    if (input) listItem.removeChild(input);
+    if (saveBtn) listItem.removeChild(saveBtn);
+    
+    // 恢复编辑图标
+    editIcon.style.display = '';
+    
+    // 插入名称显示元素
+    listItem.insertBefore(nameSpan, editIcon);
+}
+
+function updateClusterName(oldName, newName, listItem, editIcon) {
+    // 构造集群ID（与后端保持一致）
+    const clusterId = oldName.toLowerCase().replace(' ', '-');
+    
+    fetch(`/api/clusters/${clusterId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name: newName })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showToast('集群名称更新成功', 'success');
+            
+            // 更新显示
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'cluster-name';
+            nameSpan.textContent = newName;
+            
+            // 移除输入框和保存按钮
+            const input = listItem.querySelector('input');
+            const saveBtn = listItem.querySelector('.save-btn');
+            
+            if (input) listItem.removeChild(input);
+            if (saveBtn) listItem.removeChild(saveBtn);
+            
+            // 恢复编辑图标
+            editIcon.style.display = '';
+            
+            // 插入新名称
+            listItem.insertBefore(nameSpan, editIcon);
+            
+            // 更新data属性
+            listItem.dataset.clusterId = newName.toLowerCase().replace(' ', '-');
+            
+            // 如果当前选中的集群是这个集群，更新currentCluster变量
+            if (currentCluster === clusterId) {
+                currentCluster = newName.toLowerCase().replace(' ', '-');
+            }
+            
+            // 重新加载集群列表以确保一致性
+            loadClusters();
+        } else {
+            showToast('集群名称更新失败: ' + (result.error || ''), 'error');
+            cancelEditClusterName(listItem, oldName, editIcon);
+        }
+    })
+    .catch(error => {
+        console.error('更新集群名称失败:', error);
+        showToast('更新集群名称失败', 'error');
+        cancelEditClusterName(listItem, oldName, editIcon);
     });
 }
