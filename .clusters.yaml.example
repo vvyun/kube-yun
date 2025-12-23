@@ -4,27 +4,21 @@
 clusters:
   # 集群名称（作为唯一标识）
   示例集群:
-    name: "示例集群"
+    name: "示例集群" # 集群名称
     namespace: "default"
-    ssh_config:
-      hostname: "192.168.1.100"
-      username: "root"
-      # 密码支持两种格式:
-      # 1. 明文（第一次运行时会自动加密）
-      password: "your_password"
-      # 2. 加密后的密文（以ENC:开头）
-      # password: "ENC:gAAAAABm..."
-      port: 22
+    k8s_controller: KUBE # 支持KUBE SSH
+    kube_config: \home\.kube\config\config_187
   
-  # 可以添加多个集群
-  # 另一个集群:
-  #   name: "另一个集群"
-  #   namespace: "production"
-  #   ssh_config:
-  #     hostname: "192.168.1.101"
-  #     username: "admin"
-  #     password: "your_password"
-  #     port: 22
+  # 支持添加多个集群
+  另一个集群:
+    name: "另一个集群" # 集群名称
+    namespace: "production"
+    k8s_controller: SSH
+    ssh_config:
+      hostname: "192.168.1.101"
+      username: "admin"
+      password: "your_password"
+      port: 22
 
 # 加密说明:
 # - 密码会在保存时自动加密
