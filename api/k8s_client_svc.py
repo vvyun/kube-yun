@@ -1,4 +1,5 @@
 import os
+import yaml
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
@@ -111,6 +112,16 @@ class K8sClientSvc:
         if not ns:
             raise Exception("namespace name 非空")
         return self.client.delete_namespace(ns)
+
+    def get_deployment_detail(self, deploy_name: str, ns: str) -> dict:
+        """
+        获取Deployment详情
+        """
+        if not deploy_name:
+            raise Exception("deploy_name 非空")
+        if not ns:
+            raise Exception("namespace 非空")
+        return self.client.get_deployment_detail(deploy_name, ns)
 
 
 def convert2map(res: dict) -> list[dict]:
@@ -266,6 +277,24 @@ class SshK8sClient:
         if not result.get('success', False):
             raise Exception(f"删除命名空间 {ns} 失败: {result.get('error', 'Unknown error')}")
         return f"命名空间 {ns} 删除成功"
+
+    @re_connect_if_disconnect_decorator
+    def get_deployment_detail(self, deploy_name: str, ns: str) -> dict:
+        """
+        获取Deployment详情
+        """
+        if not deploy_name:
+            raise Exception("deploy_name 非空")
+        if not ns:
+            raise Exception("namespace 非空")
+        
+        # 使用kubectl获取Deployment的YAML格式详情
+        result = self.ssh_client.execute_command(f"kubectl get deployment {deploy_name} -n {ns} -o yaml")
+        if not result.get('success', False):
+            raise Exception(f"获取Deployment {deploy_name} 详情失败: {result.get('error', 'Unknown error')}")
+        
+        deployment_yaml = yaml.safe_load(result['output'])
+        return deployment_yaml
 
 
 def switch_kubeconfig_decorator(func):
@@ -516,6 +545,41 @@ class KubeK8sClient:
         # 删除命名空间
         self.core_v1.delete_namespace(name=ns)
         return f"命名空间 {ns} 删除成功"
+
+    @switch_kubeconfig_decorator
+    def get_deployment_detail(self, deploy_name: str, ns: str) -> dict:
+        """
+        获取Deployment详情
+        """
+        if not deploy_name:
+            raise Exception("deploy_name 非空")
+        if not ns:
+            raise Exception("namespace 非空")
+        
+        try:
+            deployment = self.apps_v1.read_namespaced_deployment(name=deploy_name, namespace=ns)
+            # 将Deployment对象转换为字典格式
+            deployment_dict = {
+                "apiVersion": deployment.api_version,
+                "kind": deployment.kind,
+                "metadata": {
+                    "name": deployment.metadata.name,
+                    "namespace": deployment.metadata.namespace,
+                    "creation_timestamp": deployment.metadata.creation_timestamp,
+                    "labels": deployment.metadata.labels,
+                    "annotations": deployment.metadata.annotations,
+                    "resource_version": deployment.metadata.resource_version,
+                    "uid": deployment.metadata.uid,
+                },
+                "spec": deployment.spec.to_dict(),
+                "status": deployment.status.to_dict() if deployment.status else None,
+            }
+            return deployment_dict
+        except k8s_client.ApiException as e:
+            if e.status == 404:
+                raise Exception(f"Deployment {deploy_name} 在命名空间 {ns} 中不存在")
+            else:
+                raise e
 
 
 if __name__ == "__main__":

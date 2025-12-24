@@ -17,6 +17,9 @@ export const deleteNamespace = (clusterId, namespace) => api.delete(`/clusters/$
 export const getDeployments = (clusterId, namespace) => 
   api.get(`/clusters/${clusterId}/deployments`, { params: { namespace } })
 
+export const getDeploymentDetail = (clusterId, deploymentName, namespace) =>
+  api.get(`/clusters/${clusterId}/deployments/${deploymentName}/detail`, { params: { namespace } })
+
 export const getServices = (clusterId, namespace) => 
   api.get(`/clusters/${clusterId}/services`, { params: { namespace } })
 

@@ -22,7 +22,7 @@
       <el-table-column prop="UP_TO_DATE" label="更新" width="100" />
       <el-table-column prop="AVAILABLE" label="可用" width="100" />
       <el-table-column prop="AGE" label="年龄" width="120" />
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" width="280" fixed="right">
         <template #default="{ row }">
           <el-button 
             type="primary" 
@@ -36,7 +36,14 @@
             size="small"
             @click="handleScale(row)"
           >
-            容器伸缩
+            伸缩
+          </el-button>
+          <el-button 
+            type="info" 
+            size="small"
+            @click="handleShowDetail(row.NAME)"
+          >
+            详情
           </el-button>
         </template>
       </el-table-column>
@@ -55,8 +62,8 @@
     <!-- 更新镜像对话框 -->
     <UpdateImageDialog
       v-model="showUpdateDialog"
-      :cluster-id="clusterId"
-      :namespace="namespace"
+      :cluster-id="props.clusterId"
+      :namespace="props.namespace"
       :deployment-name="selectedDeployment"
       @success="loadData"
     />
@@ -64,18 +71,34 @@
     <!-- 容器伸缩对话框 -->
     <ScaleDeploymentDialog
       v-model="showScaleDialog"
-      :cluster-id="clusterId"
-      :namespace="namespace"
+      :cluster-id="props.clusterId"
+      :namespace="props.namespace"
       :deployment="selectedDeployment"
       @success="loadData"
     />
+    
+    <!-- Deployment详情对话框 -->
+    <el-dialog
+      v-model="showDetailDialog"
+      :title="`Deployment详情 - ${selectedDeployment}`"
+      width="80%"
+      top="5vh"
+    >
+      <div class="yaml-content">
+        <pre>{{ JSON.stringify(deploymentDetail, null, 2) }}</pre>
+      </div>
+      <template #footer>
+        <el-button @click="showDetailDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
-import { getDeployments } from '../api/cluster'
+import { getDeployments, getDeploymentDetail } from '../api/cluster'
 import UpdateImageDialog from './UpdateImageDialog.vue'
 import ScaleDeploymentDialog from './ScaleDeploymentDialog.vue'
 
@@ -93,7 +116,9 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 const showUpdateDialog = ref(false)
 const showScaleDialog = ref(false)
+const showDetailDialog = ref(false)
 const selectedDeployment = ref(null)
+const deploymentDetail = ref(null)
 
 const filteredData = computed(() => {
   if (!filterText.value) return data.value
@@ -135,6 +160,16 @@ const handleScale = (deployment) => {
   showScaleDialog.value = true
 }
 
+const handleShowDetail = async (deploymentName) => {
+  try {
+    deploymentDetail.value = await getDeploymentDetail(props.clusterId, deploymentName, props.namespace)
+    selectedDeployment.value = deploymentName
+    showDetailDialog.value = true
+  } catch (error) {
+    ElMessage.error(`获取Deployment详情失败: ${error.message || error}`)
+  }
+}
+
 watch([() => props.clusterId, () => props.namespace], () => {
   loadData()
 }, { immediate: true })
@@ -164,6 +199,23 @@ defineExpose({
   margin-top: 15px;
   display: flex;
   justify-content: flex-end;
+}
+
+.yaml-content {
+  max-height: 60vh;
+  overflow: auto;
+  background-color: #f5f5f5;
+  padding: 15px;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.yaml-content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 </style>
 

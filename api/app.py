@@ -218,6 +218,22 @@ def get_deployments(cluster_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/clusters/<cluster_id>/deployments/<deployment_name>/detail', methods=['GET'])
+def get_deployment_detail(cluster_id, deployment_name):
+    """获取Deployment详情"""
+    namespace = request.args.get('namespace', 'default')
+
+    client, error_resp = get_cluster_client(cluster_id)
+    if error_resp:
+        return error_resp
+
+    try:
+        deployment_detail = client.get_deployment_detail(deployment_name, namespace)
+        return jsonify(deployment_detail)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/api/clusters/<cluster_id>/services', methods=['GET'])
 def get_services(cluster_id):
     """获取服务列表"""
