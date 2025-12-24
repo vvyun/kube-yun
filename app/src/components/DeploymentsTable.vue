@@ -1,13 +1,22 @@
 <template>
   <div class="deployments-table">
     <div class="table-header">
-      <el-input
-        v-model="filterText"
-        placeholder="按名称筛选工作负载..."
-        :prefix-icon="Search"
-        clearable
-        style="width: 300px"
-      />
+      <div class="header-content">
+        <el-input
+          v-model="filterText"
+          placeholder="按名称筛选工作负载..."
+          :prefix-icon="Search"
+          clearable
+          style="width: 300px"
+        />
+        <el-button
+          type="primary"
+          @click="showCreateDialog = true"
+          style="margin-left: 10px;"
+        >
+          部署Deployment
+        </el-button>
+      </div>
     </div>
     
     <el-table
@@ -91,6 +100,14 @@
         <el-button @click="showDetailDialog = false">关闭</el-button>
       </template>
     </el-dialog>
+    
+    <!-- 创建Deployment对话框 -->
+    <CreateDeploymentDialog
+      v-model="showCreateDialog"
+      :cluster-id="props.clusterId"
+      :namespace="props.namespace"
+      @success="loadData"
+    />
   </div>
 </template>
 
@@ -98,9 +115,10 @@
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
-import { getDeployments, getDeploymentDetail } from '../api/cluster'
+import { getDeployments, getDeploymentDetail, createDeployment } from '../api/cluster'
 import UpdateImageDialog from './UpdateImageDialog.vue'
 import ScaleDeploymentDialog from './ScaleDeploymentDialog.vue'
+import CreateDeploymentDialog from './CreateDeploymentDialog.vue'
 
 const props = defineProps({
   clusterId: String,
@@ -117,6 +135,7 @@ const pageSize = ref(10)
 const showUpdateDialog = ref(false)
 const showScaleDialog = ref(false)
 const showDetailDialog = ref(false)
+const showCreateDialog = ref(false)
 const selectedDeployment = ref(null)
 const deploymentDetail = ref(null)
 
@@ -193,6 +212,11 @@ defineExpose({
 
 .table-header {
   margin-bottom: 15px;
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
 }
 
 .pagination {

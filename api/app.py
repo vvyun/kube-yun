@@ -250,6 +250,44 @@ def get_service_detail(cluster_id, service_name):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/clusters/<cluster_id>/deployments', methods=['POST'])
+def create_deployment(cluster_id):
+    """创建Deployment"""
+    namespace = request.args.get('namespace', 'default')
+    data = request.json
+    
+    client, error_resp = get_cluster_client(cluster_id)
+    if error_resp:
+        return error_resp
+    
+    try:
+        result = client.create_deployment(namespace, data)
+        return jsonify({"success": True, "message": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/clusters/<cluster_id>/deployments/yaml', methods=['POST'])
+def create_deployment_from_yaml(cluster_id):
+    """从YAML创建Deployment"""
+    namespace = request.args.get('namespace', 'default')
+    data = request.json
+    yaml_content = data.get('yaml')
+    
+    client, error_resp = get_cluster_client(cluster_id)
+    if error_resp:
+        return error_resp
+    
+    if not yaml_content:
+        return jsonify({"error": "YAML content is required"}), 400
+    
+    try:
+        result = client.create_deployment_from_yaml(namespace, yaml_content)
+        return jsonify({"success": True, "message": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/api/clusters/<cluster_id>/services', methods=['GET'])
 def get_services(cluster_id):
     """获取服务列表"""

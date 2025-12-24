@@ -1,5 +1,6 @@
 import os
 import yaml
+import json
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
@@ -133,6 +134,17 @@ class K8sClientSvc:
             raise Exception("namespace 非空")
         return self.client.get_service_detail(service_name, ns)
 
+    def create_deployment(self, ns: str, deployment_data: dict) -> str:
+        """
+        创建Deployment
+        """
+        return self.client.create_deployment(ns, deployment_data)
+
+    def create_deployment_from_yaml(self, ns: str, yaml_content: str) -> str:
+        """
+        从YAML创建Deployment
+        """
+        return self.client.create_deployment_from_yaml(ns, yaml_content)
 
 def convert2map(res: dict) -> list[dict]:
     if not res["success"]:
@@ -323,6 +335,165 @@ class SshK8sClient:
         
         service_yaml = yaml.safe_load(result['output'])
         return service_yaml
+
+    @re_connect_if_disconnect_decorator
+    def create_deployment(self, ns: str, deployment_data: dict) -> str:
+        """
+        创建Deployment - 通过表单数据
+        """
+        import tempfile
+        import os
+        
+        # 构建Deployment YAML内容
+        deployment_yaml = self._build_deployment_yaml(deployment_data)
+        # 替换YAML中的占位符命名空间
+        deployment_yaml = deployment_yaml.replace('PLACEHOLDER_NAMESPACE', ns)
+        
+        # 创建临时文件
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write(deployment_yaml)
+            temp_file_path = f.name
+        
+        try:
+            # 使用kubectl apply创建Deployment
+            result = self.ssh_client.execute_command(f"kubectl apply -f {temp_file_path} -n {ns}")
+            if not result.get('success', False):
+                raise Exception(f"创建Deployment失败: {result.get('error', 'Unknown error')}")
+            return result['output']
+        finally:
+            # 清理临时文件
+            os.unlink(temp_file_path)
+
+    def create_deployment_from_yaml(self, ns: str, yaml_content: str) -> str:
+        """
+        从YAML内容创建Deployment
+        """
+        import tempfile
+        import os
+        import yaml as yaml_lib
+        
+        # 解析YAML内容，修改命名空间，然后重新序列化
+        try:
+            yaml_dict = yaml_lib.safe_load(yaml_content)
+            if 'metadata' in yaml_dict and yaml_dict.get('kind') == 'Deployment':
+                yaml_dict['metadata']['namespace'] = ns
+            yaml_content = yaml_lib.dump(yaml_dict, default_flow_style=False, allow_unicode=True)
+        except Exception as e:
+            # 如果YAML解析失败，使用字符串替换作为备选方案
+            yaml_content = yaml_content.replace('namespace: default', f'namespace: {ns}')
+            yaml_content = yaml_content.replace('namespace: PLACEHOLDER_NAMESPACE', f'namespace: {ns}')
+        
+        # 创建临时文件
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write(yaml_content)
+            temp_file_path = f.name
+        
+        try:
+            # 使用kubectl apply创建Deployment
+            result = self.ssh_client.execute_command(f"kubectl apply -f {temp_file_path} -n {ns}")
+            if not result.get('success', False):
+                raise Exception(f"创建Deployment失败: {result.get('error', 'Unknown error')}")
+            return result['output']
+        finally:
+            # 清理临时文件
+            os.unlink(temp_file_path)
+
+    def _build_deployment_yaml(self, deployment_data: dict) -> str:
+        """
+        根据表单数据构建Deployment YAML
+        """
+        
+        name = deployment_data.get('name', 'default-deployment')
+        image = deployment_data.get('image', 'nginx:latest')
+        replicas = deployment_data.get('replicas', 1)
+        # 注意：命名空间由调用方法传入，而不是从deployment_data中获取
+        ports = deployment_data.get('ports', [])
+        env = deployment_data.get('env', [])
+        volumes = deployment_data.get('volumes', [])
+        
+        # 构建Deployment对象
+        deployment = {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "name": name,
+                "namespace": "PLACEHOLDER_NAMESPACE",  # 将在调用方法中设置正确的命名空间
+                "labels": {
+                    "app": name
+                }
+            },
+            "spec": {
+                "replicas": replicas,
+                "selector": {
+                    "matchLabels": {
+                        "app": name
+                    }
+                },
+                "template": {
+                    "metadata": {
+                        "labels": {
+                            "app": name
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": name,
+                                "image": image,
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+        
+        # 添加端口配置
+        if ports:
+            container = deployment['spec']['template']['spec']['containers'][0]
+            container['ports'] = []
+            for port in ports:
+                if port.get('containerPort'):
+                    container['ports'].append({
+                        "containerPort": int(port['containerPort']),
+                        "protocol": port.get('protocol', 'TCP')
+                    })
+        
+        # 添加环境变量
+        if env:
+            container = deployment['spec']['template']['spec']['containers'][0]
+            container['env'] = []
+            for env_var in env:
+                if env_var.get('name') and env_var.get('value'):
+                    container['env'].append({
+                        "name": env_var['name'],
+                        "value": env_var['value']
+                    })
+        
+        # 添加卷挂载
+        if volumes:
+            container = deployment['spec']['template']['spec']['containers'][0]
+            container['volumeMounts'] = []
+            deployment['spec']['template']['spec']['volumes'] = []
+            
+            for i, volume in enumerate(volumes):
+                if volume.get('name') and volume.get('mountPath'):
+                    # 卷挂载
+                    container['volumeMounts'].append({
+                        "name": volume['name'],
+                        "mountPath": volume['mountPath']
+                    })
+                    
+                    # 卷定义
+                    deployment['spec']['template']['spec']['volumes'].append({
+                        "name": volume['name'],
+                        "hostPath": {
+                            "path": volume.get('volumePath', '/tmp'),
+                            "type": "Directory"
+                        }
+                    })
+        
+        # 转换为YAML格式
+        return yaml.dump(deployment, default_flow_style=False, allow_unicode=True)
 
 
 def switch_kubeconfig_decorator(func):
@@ -643,6 +814,141 @@ class KubeK8sClient:
                 raise Exception(f"Service {service_name} 在命名空间 {ns} 中不存在")
             else:
                 raise e
+
+    @switch_kubeconfig_decorator
+    def create_deployment(self, ns: str, deployment_data: dict) -> str:
+        """
+        使用表单数据创建Deployment
+        """
+        # 构建Deployment对象
+        deployment_yaml = self._build_deployment_yaml(deployment_data)
+        deployment_dict = yaml.safe_load(deployment_yaml)
+        
+        # 确保YAML中的命名空间与请求参数一致
+        deployment_dict['metadata']['namespace'] = ns
+        
+        # 转换为Kubernetes对象
+        deployment = self.apps_v1.create_namespaced_deployment(
+            namespace=ns,
+            body=deployment_dict
+        )
+        return f"Deployment {deployment.metadata.name} 创建成功"
+
+    @switch_kubeconfig_decorator
+    def create_deployment_from_yaml(self, ns: str, yaml_content: str) -> str:
+        """
+        从YAML内容创建Deployment
+        """
+        # 解析YAML内容
+        deployment_dict = yaml.safe_load(yaml_content)
+        
+        # 确保YAML中的命名空间与请求参数一致
+        deployment_dict['metadata']['namespace'] = ns
+        
+        # 创建Deployment
+        deployment = self.apps_v1.create_namespaced_deployment(
+            namespace=ns,
+            body=deployment_dict
+        )
+        return f"Deployment {deployment.metadata.name} 创建成功"
+
+    def _build_deployment_yaml(self, deployment_data: dict) -> str:
+        """
+        根据表单数据构建Deployment YAML
+        """
+        name = deployment_data.get('name', 'default-deployment')
+        image = deployment_data.get('image', 'nginx:latest')
+        replicas = deployment_data.get('replicas', 1)
+        # 注意：命名空间由调用方法传入，而不是从deployment_data中获取
+        ports = deployment_data.get('ports', [])
+        env = deployment_data.get('env', [])
+        volumes = deployment_data.get('volumes', [])
+        
+        # 构建Deployment对象
+        deployment = {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "name": name,
+                "namespace": "PLACEHOLDER_NAMESPACE",  # 将在调用方法中设置正确的命名空间
+                "labels": {
+                    "app": name
+                }
+            },
+            "spec": {
+                "replicas": replicas,
+                "selector": {
+                    "matchLabels": {
+                        "app": name
+                    }
+                },
+                "template": {
+                    "metadata": {
+                        "labels": {
+                            "app": name
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": name,
+                                "image": image,
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+        
+        # 添加端口配置
+        if ports:
+            container = deployment['spec']['template']['spec']['containers'][0]
+            container['ports'] = []
+            for port in ports:
+                if port.get('containerPort'):
+                    container['ports'].append({
+                        "containerPort": int(port['containerPort']),
+                        "protocol": port.get('protocol', 'TCP')
+                    })
+        
+        # 添加环境变量
+        if env:
+            container = deployment['spec']['template']['spec']['containers'][0]
+            container['env'] = []
+            for env_var in env:
+                if env_var.get('name') and env_var.get('value'):
+                    container['env'].append({
+                        "name": env_var['name'],
+                        "value": env_var['value']
+                    })
+        
+        # 添加卷挂载
+        if volumes:
+            container = deployment['spec']['template']['spec']['containers'][0]
+            container['volumeMounts'] = []
+            deployment['spec']['template']['spec']['volumes'] = []
+            
+            for i, volume in enumerate(volumes):
+                if volume.get('name') and volume.get('mountPath'):
+                    # 卷挂载
+                    container['volumeMounts'].append({
+                        "name": volume['name'],
+                        "mountPath": volume['mountPath']
+                    })
+                    
+                    # 卷定义
+                    deployment['spec']['template']['spec']['volumes'].append({
+                        "name": volume['name'],
+                        "hostPath": {
+                            "path": volume.get('volumePath', '/tmp'),
+                            "type": "Directory"
+                        }
+                    })
+        
+        # 转换为YAML格式
+        return yaml.dump(deployment, default_flow_style=False, allow_unicode=True)
+
+
 
 
 if __name__ == "__main__":
