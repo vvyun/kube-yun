@@ -1,8 +1,45 @@
-/.venv/
-.idea
-# 集群配置文件（包含敏感信息）
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# 配置文件
 .clusters.yaml
-# 加密密钥文件（重要！丢失后无法解密）
 .crypto.key
-*.pyc
-/.kube/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Vue / Vite
+app/dist/
+app/.vite/
+app/.DS_Store
+app/package-lock.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 日志
+logs/
+*.log
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# kube config
+.kube/
