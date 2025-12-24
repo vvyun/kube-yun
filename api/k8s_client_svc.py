@@ -162,6 +162,18 @@ class K8sClientSvc:
         """
         return self.client.create_deployment_from_yaml(ns, yaml_content)
 
+    def get_configmap_detail(self, ns: str, configmap_name: str) -> dict:
+        """
+        获取ConfigMap详情
+        """
+        return self.client.get_configmap_detail(ns, configmap_name)
+
+    def get_ingress_detail(self, ns: str, ingress_name: str) -> dict:
+        """
+        获取Ingress详情
+        """
+        return self.client.get_ingress_detail(ns, ingress_name)
+
 def convert2map(res: dict) -> list[dict]:
     if not res["success"]:
         return []
@@ -225,7 +237,7 @@ class SshK8sClient:
         """
         获取部署
         """
-        result = self.ssh_client.execute_command(f"kubectl get deployments -n {ns}")
+        result = self.ssh_client.execute_command(f"kubectl get deployments -n {ns} -o wide")
         return convert2map(result)
 
     @re_connect_if_disconnect_decorator
@@ -367,6 +379,42 @@ class SshK8sClient:
         
         service_yaml = yaml.safe_load(result['output'])
         return service_yaml
+
+    @re_connect_if_disconnect_decorator
+    def get_configmap_detail(self, configmap_name: str, ns: str) -> dict:
+        """
+        获取ConfigMap详情
+        """
+        if not configmap_name:
+            raise Exception("configmap_name 非空")
+        if not ns:
+            raise Exception("namespace 非空")
+        
+        # 使用kubectl获取ConfigMap的YAML格式详情
+        result = self.ssh_client.execute_command(f"kubectl get configmap {configmap_name} -n {ns} -o yaml")
+        if not result.get('success', False):
+            raise Exception(f"获取ConfigMap {configmap_name} 详情失败: {result.get('error', 'Unknown error')}")
+        
+        configmap_yaml = yaml.safe_load(result['output'])
+        return configmap_yaml
+
+    @re_connect_if_disconnect_decorator
+    def get_ingress_detail(self, ingress_name: str, ns: str) -> dict:
+        """
+        获取Ingress详情
+        """
+        if not ingress_name:
+            raise Exception("ingress_name 非空")
+        if not ns:
+            raise Exception("namespace 非空")
+        
+        # 使用kubectl获取Ingress的YAML格式详情
+        result = self.ssh_client.execute_command(f"kubectl get ingress {ingress_name} -n {ns} -o yaml")
+        if not result.get('success', False):
+            raise Exception(f"获取Ingress {ingress_name} 详情失败: {result.get('error', 'Unknown error')}")
+        
+        ingress_yaml = yaml.safe_load(result['output'])
+        return ingress_yaml
 
     @re_connect_if_disconnect_decorator
     def create_deployment(self, ns: str, deployment_data: dict) -> str:
@@ -626,6 +674,7 @@ class KubeK8sClient:
                 "UP-TO-DATE": uptodate,
                 "AVAILABLE": available,
                 "AGE": self._format_age(dep.metadata.creation_timestamp),
+                "IMAGES": self._join_images(dep.spec.template.spec.containers)
             })
         return result
 
@@ -890,6 +939,77 @@ class KubeK8sClient:
         except k8s_client.ApiException as e:
             if e.status == 404:
                 raise Exception(f"Service {service_name} 在命名空间 {ns} 中不存在")
+            else:
+                raise e
+
+    @switch_kubeconfig_decorator
+    def get_configmap_detail(self, configmap_name: str, ns: str) -> dict:
+        """
+        获取ConfigMap详情
+        """
+        if not configmap_name:
+            raise Exception("configmap_name 非空")
+        if not ns:
+            raise Exception("namespace 非空")
+        
+        try:
+            configmap = self.core_v1.read_namespaced_config_map(name=configmap_name, namespace=ns)
+            # 将ConfigMap对象转换为字典格式
+            configmap_dict = {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {
+                    "name": configmap.metadata.name,
+                    "namespace": configmap.metadata.namespace,
+                    "creation_timestamp": configmap.metadata.creation_timestamp,
+                    "labels": configmap.metadata.labels,
+                    "annotations": configmap.metadata.annotations,
+                    "resource_version": configmap.metadata.resource_version,
+                    "uid": configmap.metadata.uid,
+                },
+                "data": configmap.data,
+                "binaryData": configmap.binary_data,
+            }
+            return configmap_dict
+        except k8s_client.ApiException as e:
+            if e.status == 404:
+                raise Exception(f"ConfigMap {configmap_name} 在命名空间 {ns} 中不存在")
+            else:
+                raise e
+
+    @switch_kubeconfig_decorator
+    def get_ingress_detail(self, ingress_name: str, ns: str) -> dict:
+        """
+        获取Ingress详情
+        """
+        if not ingress_name:
+            raise Exception("ingress_name 非空")
+        if not ns:
+            raise Exception("namespace 非空")
+        
+        try:
+            networking_v1 = k8s_client.NetworkingV1Api()
+            ingress = networking_v1.read_namespaced_ingress(name=ingress_name, namespace=ns)
+            # 将Ingress对象转换为字典格式
+            ingress_dict = {
+                "apiVersion": ingress.api_version,
+                "kind": ingress.kind,
+                "metadata": {
+                    "name": ingress.metadata.name,
+                    "namespace": ingress.metadata.namespace,
+                    "creation_timestamp": ingress.metadata.creation_timestamp,
+                    "labels": ingress.metadata.labels,
+                    "annotations": ingress.metadata.annotations,
+                    "resource_version": ingress.metadata.resource_version,
+                    "uid": ingress.metadata.uid,
+                },
+                "spec": ingress.spec.to_dict(),
+                "status": ingress.status.to_dict() if ingress.status else None,
+            }
+            return ingress_dict
+        except k8s_client.ApiException as e:
+            if e.status == 404:
+                raise Exception(f"Ingress {ingress_name} 在命名空间 {ns} 中不存在")
             else:
                 raise e
 

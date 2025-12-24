@@ -1,29 +1,17 @@
 <template>
   <div class="ingresses-table">
     <div class="table-header">
-      <el-button 
-        type="primary" 
-        :icon="Plus" 
-        @click="handleCreate"
-        style="margin-bottom: 16px;"
-      >
-        创建Ingress
-      </el-button>
-      <el-button 
-        :icon="Refresh" 
-        @click="loadData"
-        style="margin-bottom: 16px; margin-left: 8px;"
-      >
-        刷新
-      </el-button>
+      <div class="header-content">
+        <el-input v-model="filterText" placeholder="按名称筛选Ingress..." :prefix-icon="Search" clearable
+          style="width: 300px" />
+        <el-button type="primary" @click="handleCreate" style="margin-left: auto; ">
+          部署Ingress
+        </el-button>
+      </div>
     </div>
-    
-    <el-table 
-      :data="ingresses" 
-      v-loading="loading"
-      style="width: 100%"
-      :default-sort="{ prop: 'AGE', order: 'descending' }"
-    >
+
+    <el-table :data="ingresses" v-loading="loading" style="width: 100%"
+      :default-sort="{ prop: 'AGE', order: 'descending' }">
       <el-table-column prop="NAME" label="名称" min-width="200" show-overflow-tooltip>
         <template #default="{ row }">
           <el-link type="primary" @click="handleViewDetail(row)">{{ row.NAME }}</el-link>
@@ -32,35 +20,38 @@
       <el-table-column prop="CLASS" label="类别" min-width="120" show-overflow-tooltip />
       <el-table-column prop="HOSTS" label="主机" min-width="200" show-overflow-tooltip />
       <el-table-column prop="ADDRESS" label="地址" min-width="150" show-overflow-tooltip />
-      <el-table-column prop="AGE" label="年龄" min-width="120" />
+      <el-table-column prop="AGE" label="运行时长" min-width="120" />
       <el-table-column label="操作" width="200">
         <template #default="{ row }">
-          <el-button size="small" @click="handleViewDetail(row)">查看</el-button>
+          <el-button size="small" type="info" @click="handleViewDetail(row)">详情</el-button>
           <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
-    
+
     <!-- 分页 -->
-    <el-pagination
-      v-if="total > pageSize"
-      @size-change="handleSizeChange"
-      @current-change="handleCurrentChange"
-      :current-page="currentPage"
-      :page-sizes="[10, 20, 50, 100]"
-      :page-size="pageSize"
-      layout="total, sizes, prev, pager, next, jumper"
-      :total="total"
-      style="margin-top: 16px; justify-content: center; display: flex;"
-    />
+    <el-pagination v-if="total > pageSize" @size-change="handleSizeChange" @current-change="handleCurrentChange"
+      :current-page="currentPage" :page-sizes="[10, 20, 50, 100]" :page-size="pageSize"
+      layout="total, sizes, prev, pager, next, jumper" :total="total"
+      style="margin-top: 16px; justify-content: center; display: flex;" />
   </div>
+
+  <!-- 详情对话框 -->
+  <DetailViewDialog
+    v-model="showDetailDialog"
+    :cluster-id="props.clusterId"
+    :namespace="props.namespace"
+    :resource-name="selectedIngress"
+    resource-type="Ingress"
+  />
 </template>
 
 <script setup>
 import { ref, onMounted, defineProps, defineEmits } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
-import { getIngresses } from '../api/cluster'
+import { getIngresses } from '../../api/cluster'
+import DetailViewDialog from '../dialogs/DetailViewDialog.vue'
 
 const props = defineProps({
   clusterId: {
@@ -81,15 +72,19 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
 
+// 详情对话框相关变量
+const showDetailDialog = ref(false)
+const selectedIngress = ref(null)
+
 // 加载Ingress数据
 const loadData = async () => {
   if (!props.clusterId || !props.namespace) return
-  
+
   loading.value = true
   try {
     const response = await getIngresses(props.clusterId, props.namespace)
     ingresses.value = response
-    
+
     // 计算总数（如果需要分页）
     total.value = response.length
   } catch (error) {
@@ -120,7 +115,8 @@ const handleCreate = () => {
 
 // 处理查看详情
 const handleViewDetail = (row) => {
-  ElMessage.info(`查看Ingress ${row.NAME} 详情功能待实现`)
+  selectedIngress.value = row.NAME
+  showDetailDialog.value = true
 }
 
 // 处理删除
@@ -135,7 +131,7 @@ const handleDelete = async (row) => {
         type: 'warning'
       }
     )
-    
+
     ElMessage.info(`删除Ingress ${row.NAME} 功能待实现`)
     // 实际删除后重新加载数据
     loadData()
@@ -158,14 +154,41 @@ defineExpose({
 </script>
 
 <style scoped>
-.ingresses-table {
-  padding: 16px;
+.common-table {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .table-header {
+  margin-bottom: 15px;
+}
+
+.header-content {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+}
+
+.pagination {
+  margin-top: 15px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.yaml-content {
+  max-height: 60vh;
+  overflow: auto;
+  background-color: #f5f5f5;
+  padding: 15px;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.yaml-content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 </style>

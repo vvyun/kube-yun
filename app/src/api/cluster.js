@@ -23,6 +23,12 @@ export const getDeploymentDetail = (clusterId, deploymentName, namespace) =>
 export const getServiceDetail = (clusterId, serviceName, namespace) =>
   api.get(`/clusters/${clusterId}/services/${serviceName}/detail`, { params: { namespace } })
 
+export const getConfigMapDetail = (clusterId, configMapName, namespace) =>
+  api.get(`/clusters/${clusterId}/configmaps/${configMapName}/detail`, { params: { namespace } })
+
+export const getIngressDetail = (clusterId, ingressName, namespace) =>
+  api.get(`/clusters/${clusterId}/ingresses/${ingressName}/detail`, { params: { namespace } })
+
 export const getServices = (clusterId, namespace) => 
   api.get(`/clusters/${clusterId}/services`, { params: { namespace } })
 
