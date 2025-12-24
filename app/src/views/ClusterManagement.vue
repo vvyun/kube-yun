@@ -39,6 +39,7 @@
       <el-tabs v-model="activeTab" @tab-change="handleTabChange">
         <el-tab-pane label="工作负载" name="deployments">
           <DeploymentsTable 
+            ref="deploymentsTableRef"
             :cluster-id="clusterId"
             :namespace="currentNamespace"
             @refresh="loadCurrentTabData"
@@ -46,12 +47,14 @@
         </el-tab-pane>
         <el-tab-pane label="服务" name="services">
           <ServicesTable 
+            ref="servicesTableRef"
             :cluster-id="clusterId"
             :namespace="currentNamespace"
           />
         </el-tab-pane>
         <el-tab-pane label="Pods" name="pods">
           <PodsTable 
+            ref="podsTableRef"
             :cluster-id="clusterId"
             :namespace="currentNamespace"
             @refresh="loadCurrentTabData"
@@ -84,6 +87,9 @@ const store = useStore()
 const activeTab = ref('deployments')
 const namespaces = ref([])
 const showBatchUpdateDialog = ref(false)
+const deploymentsTableRef = ref(null)
+const servicesTableRef = ref(null)
+const podsTableRef = ref(null)
 
 const currentCluster = computed(() => store.state.currentCluster)
 const currentNamespace = computed({
@@ -122,8 +128,14 @@ const handleTabChange = () => {
 }
 
 const loadCurrentTabData = () => {
-  // 触发子组件刷新
-  // 子组件会监听 props 变化自动刷新
+  // 根据当前激活的标签页，调用对应组件的刷新方法
+  if (activeTab.value === 'deployments' && deploymentsTableRef.value && deploymentsTableRef.value.loadData) {
+    deploymentsTableRef.value.loadData()
+  } else if (activeTab.value === 'services' && servicesTableRef.value && servicesTableRef.value.loadData) {
+    servicesTableRef.value.loadData()
+  } else if (activeTab.value === 'pods' && podsTableRef.value && podsTableRef.value.loadData) {
+    podsTableRef.value.loadData()
+  }
 }
 
 watch(() => currentCluster.value, (newCluster) => {

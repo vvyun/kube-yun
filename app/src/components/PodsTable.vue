@@ -169,6 +169,11 @@ watch([() => props.clusterId, () => props.namespace], () => {
 watch(() => filterText.value, () => {
   currentPage.value = 1
 })
+
+// 暴露方法给父组件
+defineExpose({
+  loadData
+})
 </script>
 
 <style scoped>
