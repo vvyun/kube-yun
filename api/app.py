@@ -1,12 +1,19 @@
 import os
+import sys
+
+# 添加 api 目录到路径
+api_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, api_dir)
 
 import yaml
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, send_from_directory, jsonify, request
+from flask_cors import CORS
 
 from crypto_utils import crypto_manager
 from k8s_client_svc import K8sClientSvc
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder=None)
+CORS(app)  # 启用 CORS 支持
 
 # 配置文件路径
 CLUSTERS_CONFIG_FILE = '.clusters.yaml'
@@ -95,9 +102,15 @@ def get_cluster_client(cluster_id):
     return client, None
 
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# 静态文件服务 - 为 Vue 应用提供静态文件
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_vue_app(path):
+    """服务 Vue 应用的静态文件"""
+    app_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'app', 'dist')
+    if path and os.path.exists(os.path.join(app_dir, path)):
+        return send_from_directory(app_dir, path)
+    return send_from_directory(app_dir, 'index.html')
 
 
 @app.route('/api/clusters', methods=['GET'])
@@ -382,3 +395,4 @@ def delete_cluster(cluster_id):
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
+
