@@ -17,8 +17,8 @@ KubeYun 一个即为精简的Kubernetes 集群管理平台， 支持kubeconfig �
 - ✅ 快速更新镜像
 - ✅ 应用YAML功能
 
-![ui-1](images/kube-yun-img.png)
-
+![img1-pods](images/kube-yun-img0.png)
+![img1-cm1](images/kube-yun-img1.png)
 
 ## 计划事项
 
