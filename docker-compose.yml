@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  backend:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    container_name: kube-yun-api
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./.clusters.yaml:/app/.clusters.yaml  # 持久化集群配置
+      - ./.kube/config:/app/.kube/config  # 持久化Kube配置
+      - ./logs:/app/logs  # 持久化日志
+    environment:
+      - FLASK_ENV=production
+    networks:
+      - kubeyun-network
+    restart: unless-stopped
+
+  frontend:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile.frontend
+    container_name: kube-yun-app
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - kubeyun-network
+    restart: unless-stopped
+
+networks:
+  kubeyun-network:
+    driver: bridge
