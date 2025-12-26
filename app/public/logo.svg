@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- Kubernetes-style design -->
+  <defs>
+    <linearGradient id="blueGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#326ce5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2958c7;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main hexagon shape (Kubernetes inspired) -->
+  <polygon points="100,20 160,55 160,125 100,160 40,125 40,55" fill="url(#blueGradient)" />
+  
+  <!-- K8s style "K" letter -->
+  <text x="100" y="115" text-anchor="middle" font-family="Arial, sans-serif" 
+        font-size="70" font-weight="bold" fill="white">K</text>
+        
+  <!-- Smaller "Y" for KubeYun -->
+  <text x="100" y="145" text-anchor="middle" font-family="Arial, sans-serif" 
+        font-size="24" font-weight="bold" fill="white">Yun</text>
+        
+  <!-- Small cube design elements -->
+  <rect x="60" y="60" width="15" height="15" fill="#fff" opacity="0.7" />
+  <rect x="125" y="60" width="15" height="15" fill="#fff" opacity="0.7" />
+  <rect x="60" y="120" width="15" height="15" fill="#fff" opacity="0.7" />
+  <rect x="125" y="120" width="15" height="15" fill="#fff" opacity="0.7" />
+</svg>
