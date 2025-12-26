@@ -33,6 +33,8 @@ docker build -f Dockerfile.frontend -t kube-yun-app .
 
 ## 数据持久化
 - `.clusters.yaml`: 集群配置文件
+- `.crypto.key`: 加密KEY
+- `.kube`: kube配置文件
 - `./logs`: 日志目录
 
 ## 环境变量

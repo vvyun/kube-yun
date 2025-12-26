@@ -2,8 +2,13 @@
   <div class="cluster-sidebar">
     <div class="sidebar-header">
       <div>
-        <h3>集群列表</h3>
-        <p class="sidebar-subtitle">点击切换集群并进行管理</p>
+        <div class="logo-container">
+          <img src="/logo.svg" alt="KubeYun Logo" class="logo" />
+          <div>
+            <h3>集群列表</h3>
+            <p class="sidebar-subtitle">点击切换集群并进行管理</p>
+          </div>
+        </div>
       </div>
       <div class="sidebar-actions">
         <el-button :icon="Refresh" circle size="medium" @click="loadClusters" title="刷新集群" />
@@ -211,6 +216,18 @@ onMounted(() => {
 
 :deep(.cluster-search .el-input__inner::placeholder) {
   color: #9fb3c8;
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .cluster-list {
