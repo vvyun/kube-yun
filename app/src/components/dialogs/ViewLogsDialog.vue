@@ -18,6 +18,22 @@
         <el-option label="1000行" :value="1000" />
         <el-option label="全部" :value="null" />
       </el-select>
+      <el-select 
+        v-model="logSince" 
+        placeholder="时间段"
+        style="width: 150px"
+        @change="loadLogs"
+      >
+        <el-option label="全部时间" :value="null" />
+        <el-option label="最后5分钟" value="5m" />
+        <el-option label="最后15分钟" value="15m" />
+        <el-option label="最后30分钟" value="30m" />
+        <el-option label="最后1小时" value="1h" />
+        <el-option label="最后6小时" value="6h" />
+        <el-option label="最后12小时" value="12h" />
+        <el-option label="最后24小时" value="24h" />
+        <el-option label="最后7天" value="7d" />
+      </el-select>
       <el-button :icon="Refresh" @click="loadLogs">刷新</el-button>
       <el-button :icon="Download" @click="downloadLogs">下载日志</el-button>
     </div>
@@ -52,6 +68,7 @@ const dialogVisible = ref(props.modelValue)
 const loading = ref(false)
 const logs = ref('')
 const logLines = ref(100)
+const logSince = ref(null)
 
 watch(() => props.modelValue, (val) => {
   dialogVisible.value = val
@@ -73,7 +90,8 @@ const loadLogs = async () => {
       props.clusterId,
       props.podName,
       props.namespace,
-      logLines.value
+      logLines.value,
+      logSince.value
     )
     logs.value = result.logs || '无日志输出'
   } catch (error) {

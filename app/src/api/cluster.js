@@ -62,9 +62,9 @@ export const deleteConfigMap = (clusterId, configMapName, namespace) =>
 export const deleteIngress = (clusterId, ingressName, namespace) =>
   api.delete(`/clusters/${clusterId}/ingresses/${ingressName}`, { params: { namespace } })
 
-export const getPodLogs = (clusterId, podName, namespace, lines) =>
+export const getPodLogs = (clusterId, podName, namespace, lines, since) =>
   api.get(`/clusters/${clusterId}/pods/${podName}/logs`, { 
-    params: { namespace, lines } 
+    params: { namespace, lines, since } 
   })
 
 export const searchDeploymentsByImage = (clusterId, image, namespace) =>

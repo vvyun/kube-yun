@@ -240,6 +240,7 @@ def get_pod_logs(cluster_id, pod_name):
     """获取Pod日志"""
     namespace = request.args.get('namespace', 'default')
     lines = request.args.get('lines', None)
+    since = request.args.get('since', None)  # 时间段参数，例如 '5m', '1h', '24h'
 
     client, error_resp = get_cluster_client(cluster_id)
     if error_resp:
@@ -248,7 +249,7 @@ def get_pod_logs(cluster_id, pod_name):
     try:
         # 将lines转换为整数，如果为空则不传
         log_lines = int(lines) if lines else None
-        logs = client.logs(namespace, pod_name, log_lines)
+        logs = client.logs(namespace, pod_name, log_lines, since=since)
         return jsonify({"success": True, "logs": logs})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

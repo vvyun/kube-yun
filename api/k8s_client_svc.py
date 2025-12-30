@@ -75,12 +75,12 @@ class K8sClientSvc:
             ns = self.namespace
         return self.client.get_ingresses(ns)
 
-    def logs(self, ns: str = None, pod_name: str = None, lines: int = None) -> str:
+    def logs(self, ns: str = None, pod_name: str = None, lines: int = None, since: str = None) -> str:
         if ns is None:
             ns = self.namespace
         if not pod_name:
             raise Exception("pod name 非空")
-        return self.client.logs(ns, pod_name, lines)
+        return self.client.logs(ns, pod_name, lines, since=since)
 
     def delete_pod(self, ns: str = None, pod_name: str = None) -> str:
         if ns is None:
@@ -542,9 +542,14 @@ class SshK8sClient:
         return convert2map(result)
 
     @re_connect_if_disconnect_decorator
-    def logs(self, ns: str = None, pods_name: str = None, lines: int = None) -> str:
-        args = f"--tail {lines}" if lines else ""
-        cmd = f"""kubectl logs {args} -n {ns} {pods_name}"""
+    def logs(self, ns: str = None, pods_name: str = None, lines: int = None, since: str = None) -> str:
+        args = []
+        if lines:
+            args.append(f"--tail {lines}")
+        if since:
+            args.append(f"--since={since}")
+        args_str = " ".join(args)
+        cmd = f"""kubectl logs {args_str} -n {ns} {pods_name}"""
         result = self.ssh_client.execute_command(cmd)
         return result["output"]
 
@@ -1029,12 +1034,50 @@ class KubeK8sClient:
         return result
 
     @switch_kubeconfig_decorator
-    def logs(self, ns: str = None, pods_name: str = None, lines: int = None) -> str:
+    def logs(self, ns: str = None, pods_name: str = None, lines: int = None, since: str = None) -> str:
         if not pods_name:
             raise Exception("pod name 非空")
-        return self.core_v1.read_namespaced_pod_log(
-            name=pods_name, namespace=ns or self.namespace, tail_lines=lines
-        )
+        kwargs = {
+            'name': pods_name,
+            'namespace': ns or self.namespace
+        }
+        if lines is not None:
+            kwargs['tail_lines'] = lines
+        if since:
+            kwargs['since_seconds'] = self._parse_since_to_seconds(since)
+        return self.core_v1.read_namespaced_pod_log(**kwargs)
+
+    def _parse_since_to_seconds(self, since: str) -> int:
+        """将时间字符串转换为秒数，例如 '5m' -> 300, '1h' -> 3600"""
+        if not since:
+            return None
+        
+        # 移除空格
+        since = since.strip()
+        
+        # 提取数字和单位
+        if since.endswith('s'):
+            multiplier = 1
+            number_str = since[:-1]
+        elif since.endswith('m'):
+            multiplier = 60
+            number_str = since[:-1]
+        elif since.endswith('h'):
+            multiplier = 3600
+            number_str = since[:-1]
+        elif since.endswith('d'):
+            multiplier = 86400
+            number_str = since[:-1]
+        else:
+            # 默认为秒
+            multiplier = 1
+            number_str = since
+        
+        try:
+            number = int(number_str)
+            return number * multiplier
+        except ValueError:
+            raise ValueError(f"Invalid since format: {since}. Expected format like '5m', '1h', '24h'")
 
     @switch_kubeconfig_decorator
     def get_configmaps(self, ns: str) -> List[Dict]:
