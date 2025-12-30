@@ -24,15 +24,14 @@
         style="width: 150px"
         @change="loadLogs"
       >
-        <el-option label="全部时间" :value="null" />
+        <el-option label="全部时间" :value="null" default />
+        <el-option label="最后1分钟" value="1m" />
         <el-option label="最后5分钟" value="5m" />
         <el-option label="最后15分钟" value="15m" />
         <el-option label="最后30分钟" value="30m" />
-        <el-option label="最后1小时" value="1h" />
-        <el-option label="最后6小时" value="6h" />
-        <el-option label="最后12小时" value="12h" />
-        <el-option label="最后24小时" value="24h" />
-        <el-option label="最后7天" value="7d" />
+        <el-option label="最后1小时" value="60m" />
+        <el-option label="最后24小时" value="1440m" />
+        <el-option label="最后7天" value="10080m" />
       </el-select>
       <el-button :icon="Refresh" @click="loadLogs">刷新</el-button>
       <el-button :icon="Download" @click="downloadLogs">下载日志</el-button>
