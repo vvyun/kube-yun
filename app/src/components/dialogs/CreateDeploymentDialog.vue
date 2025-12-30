@@ -18,24 +18,32 @@
       <el-form-item label="副本数" prop="replicas">
         <el-input-number v-model="formData.replicas" :min="1" :max="100" />
       </el-form-item>
-
-      <el-form-item label="端口映射">
+      <el-form-item label="端口映射" prop="ports">
         <el-button @click="addPort" type="primary" size="small" plain>添加端口</el-button>
+      </el-form-item>
+      <el-form-item>
         <div class="port-list">
           <div v-for="(port, index) in formData.ports" :key="index" class="port-item">
             <el-input v-model="port.containerPort" placeholder="容器端口" style="width: 120px; margin-right: 10px" />
-            <el-input v-model="port.servicePort" placeholder="服务端口" style="width: 120px; margin-right: 10px" />
             <el-select v-model="port.protocol" placeholder="协议" style="width: 100px; margin-right: 10px">
               <el-option label="TCP" value="TCP" />
               <el-option label="UDP" value="UDP" />
             </el-select>
+            <el-select placeholder="网络模式" style="width: 120px; margin-right: 10px">
+              <el-option label="NodePort(所有主机端口均可访问)" value="NodePort" />
+              <el-option label="HostPort(仅 Pod 所在主机端口可访问)" value="HostPort" />
+              <el-option label="ClusterIP(集群内部访问)" value="ClusterIP" default />
+              <el-option label="LoadBalancer(对接公有云负载均衡服务)" value="LoadBalancer" />
+            </el-select>
+            <el-input v-model="port.servicePort" placeholder="主机监听端口" style="width: 120px; margin-right: 10px" />
             <el-button @click="removePort(index)" type="danger" size="small" plain>删除</el-button>
           </div>
         </div>
       </el-form-item>
-
       <el-form-item label="环境变量">
         <el-button @click="addEnvVar" type="primary" size="small" plain>添加环境变量</el-button>
+      </el-form-item>
+      <el-form-item>
         <div class="env-list">
           <div v-for="(env, index) in formData.env" :key="index" class="env-item">
             <el-input v-model="env.name" placeholder="变量名" style="width: 150px; margin-right: 10px" />
@@ -44,9 +52,10 @@
           </div>
         </div>
       </el-form-item>
-
       <el-form-item label="挂载卷">
         <el-button @click="addVolume" type="primary" size="small" plain>添加挂载</el-button>
+      </el-form-item>
+      <el-form-item>
         <div class="volume-list">
           <div v-for="(volume, index) in formData.volumes" :key="index" class="volume-item">
             <el-input v-model="volume.name" placeholder="卷名" style="width: 120px; margin-right: 10px" />
