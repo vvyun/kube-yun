@@ -102,101 +102,11 @@ def get_cluster_client(cluster_id):
     return client, None
 
 
+# GET 方法 - 查询类
 @app.route('/api/clusters', methods=['GET'])
 def get_clusters():
     """获取集群列表"""
     return jsonify(list(clusters.values()))
-
-
-@app.route('/api/clusters', methods=['POST'])
-def add_cluster():
-    """添加新集群"""
-    data = request.json
-    cluster_id = data['name']
-    k8s_controller = data.get('k8s_controller', 'SSH')
-
-    # 先初始化客户端，避免反复创建
-    try:
-        client = K8sClientSvc(
-            namespace=data.get('namespace', 'default'),
-            k8s_controller=k8s_controller,
-            ssh_config=data.get('ssh_config'),
-            kube_config=data.get('kube_config')
-        )
-    except Exception as e:
-        return jsonify({"success": False, "error": f"初始化集群客户端失败: {e}"}), 500
-
-    # 添加到内存中的集群字典
-    clusters[cluster_id] = data
-
-    # 保存到YAML文件
-    if save_clusters(clusters):
-        clients[cluster_id] = client
-        return jsonify({"success": True, "cluster_id": cluster_id})
-    else:
-        # 如果保存失败，从内存中移除
-        del clusters[cluster_id]
-        return jsonify({"success": False, "error": "保存集群配置失败"}), 500
-
-
-@app.route('/api/clusters/<cluster_id>', methods=['PUT'])
-def update_cluster(cluster_id):
-    """更新集群信息"""
-    data = request.json
-    new_name = data.get('name')
-
-    if cluster_id not in clusters:
-        return jsonify({"error": "Cluster not found"}), 404
-
-    if not new_name:
-        return jsonify({"error": "Cluster name is required"}), 400
-
-    # 更新集群名称
-    cluster = clusters[cluster_id]
-    old_name = cluster['name']
-    cluster['name'] = new_name
-    new_cluster_id = new_name
-    # 如果集群ID是根据旧名称生成的，也需要更新
-    if cluster_id == old_name:
-        clusters[new_cluster_id] = cluster
-        del clusters[cluster_id]
-        if cluster_id in clients:
-            clients[new_cluster_id] = clients.pop(cluster_id)
-
-    # 保存到文件
-    if save_clusters(clusters):
-        return jsonify({"success": True, "cluster_id": cluster_id})
-    else:
-        # 回滚更改
-        cluster['name'] = old_name
-        if cluster_id == old_name:
-            clusters[cluster_id] = cluster
-            del clusters[new_cluster_id]
-            if new_cluster_id in clients:
-                clients[cluster_id] = clients.pop(new_cluster_id)
-        return jsonify({"success": False, "error": "保存集群配置失败"}), 500
-
-
-@app.route('/api/clusters/<cluster_id>', methods=['DELETE'])
-def delete_cluster(cluster_id):
-    """删除集群"""
-    if cluster_id not in clusters:
-        return jsonify({"error": "Cluster not found"}), 404
-
-    backup_cluster = clusters[cluster_id]
-    backup_client = clients.pop(cluster_id, None)
-    # 删除集群
-    del clusters[cluster_id]
-
-    # 保存到文件
-    if save_clusters(clusters):
-        return jsonify({"success": True})
-    else:
-        # 如果保存失败，需要恢复集群（这里简化处理，实际应该更复杂）
-        clusters[cluster_id] = backup_cluster
-        if backup_client:
-            clients[cluster_id] = backup_client
-        return jsonify({"success": False, "error": "保存集群配置失败"}), 500
 
 
 @app.route('/api/clusters/<cluster_id>/namespaces', methods=['GET'])
@@ -217,40 +127,6 @@ def get_namespaces(cluster_id):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/clusters/<cluster_id>/namespaces', methods=['POST'])
-def create_namespace(cluster_id):
-    """创建命名空间"""
-    data = request.json
-    namespace = data.get('namespace')
-
-    client, error_resp = get_cluster_client(cluster_id)
-    if error_resp:
-        return error_resp
-
-    if not namespace:
-        return jsonify({"error": "Namespace name is required"}), 400
-
-    try:
-        result = client.create_namespace(namespace)
-        return jsonify({"success": True, "message": result})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/clusters/<cluster_id>/namespaces/<namespace>', methods=['DELETE'])
-def delete_namespace(cluster_id, namespace):
-    """删除命名空间"""
-    client, error_resp = get_cluster_client(cluster_id)
-    if error_resp:
-        return error_resp
-
-    try:
-        result = client.delete_namespace(namespace)
-        return jsonify({"success": True, "message": result})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
 @app.route('/api/clusters/<cluster_id>/deployments', methods=['GET'])
 def get_deployments(cluster_id):
     """获取工作负载列表"""
@@ -267,44 +143,6 @@ def get_deployments(cluster_id):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/clusters/<cluster_id>/deployments', methods=['POST'])
-def create_deployment(cluster_id):
-    """创建Deployment"""
-    namespace = request.args.get('namespace', 'default')
-    data = request.json
-
-    client, error_resp = get_cluster_client(cluster_id)
-    if error_resp:
-        return error_resp
-
-    try:
-        result = client.create_deployment(namespace, data)
-        return jsonify({"success": True, "message": result})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/clusters/<cluster_id>/deployments/<deployment_name>/update-image', methods=['POST'])
-def update_deployment_image(cluster_id, deployment_name):
-    """更新部署镜像"""
-    namespace = request.args.get('namespace', 'default')
-    data = request.json
-    image = data.get('image')
-
-    client, error_resp = get_cluster_client(cluster_id)
-    if error_resp:
-        return error_resp
-
-    if not image:
-        return jsonify({"error": "Image is required"}), 400
-
-    try:
-        result = client.update_deployment_image(namespace, deployment_name, image)
-        return jsonify({"success": True, "result": result})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
 @app.route('/api/clusters/<cluster_id>/services', methods=['GET'])
 def get_services(cluster_id):
     """获取服务列表"""
@@ -317,57 +155,6 @@ def get_services(cluster_id):
     try:
         services = client.get_services(namespace)
         return jsonify(services)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/clusters/<cluster_id>/services', methods=['POST'])
-def create_service(cluster_id):
-    """创建Service"""
-    namespace = request.args.get('namespace', 'default')
-    data = request.json
-
-    client, error_resp = get_cluster_client(cluster_id)
-    if error_resp:
-        return error_resp
-
-    try:
-        result = client.create_service(namespace, data)
-        return jsonify({"success": True, "message": result})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/clusters/<cluster_id>/configmaps', methods=['POST'])
-def create_configmap(cluster_id):
-    """创建ConfigMap"""
-    namespace = request.args.get('namespace', 'default')
-    data = request.json
-
-    client, error_resp = get_cluster_client(cluster_id)
-    if error_resp:
-        return error_resp
-
-    try:
-        result = client.create_configmap(namespace, data)
-        return jsonify({"success": True, "message": result})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/clusters/<cluster_id>/ingresses', methods=['POST'])
-def create_ingress(cluster_id):
-    """创建Ingress"""
-    namespace = request.args.get('namespace', 'default')
-    data = request.json
-
-    client, error_resp = get_cluster_client(cluster_id)
-    if error_resp:
-        return error_resp
-
-    try:
-        result = client.create_ingress(namespace, data)
-        return jsonify({"success": True, "message": result})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -448,6 +235,198 @@ def get_source_detail(cluster_id, source_type, source_name):
     return jsonify(_detail_)
 
 
+@app.route('/api/clusters/<cluster_id>/pods/<pod_name>/logs', methods=['GET'])
+def get_pod_logs(cluster_id, pod_name):
+    """获取Pod日志"""
+    namespace = request.args.get('namespace', 'default')
+    lines = request.args.get('lines', None)
+
+    client, error_resp = get_cluster_client(cluster_id)
+    if error_resp:
+        return error_resp
+
+    try:
+        # 将lines转换为整数，如果为空则不传
+        log_lines = int(lines) if lines else None
+        logs = client.logs(namespace, pod_name, log_lines)
+        return jsonify({"success": True, "logs": logs})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/clusters/<cluster_id>/search-deployments-by-image', methods=['GET'])
+def search_deployments_by_image(cluster_id):
+    """根据镜像名称查询工作负载"""
+    namespace = request.args.get('namespace', 'default')
+    image_name = request.args.get('image', '')
+
+    client, error_resp = get_cluster_client(cluster_id)
+    if error_resp:
+        return error_resp
+
+    if not image_name:
+        return jsonify({"error": "Image name is required"}), 400
+
+    try:
+        deoloy_images = client.get_deployment_images(namespace)
+
+        # 筛选包含指定镜像的部署
+        # 这里简化处理，实际需要根据具体情况调整
+        matching_deployments = []
+        for deoloy_image in deoloy_images:
+            if str(deoloy_image["IMAGES"]).startswith(image_name.split(":")[0]):
+                matching_deployments.append({
+                    "name": deoloy_image.get("NAME", ""),
+                    "ready": deoloy_image.get("READY", ""),
+                    "image": deoloy_image.get("IMAGES", ""),
+                    "namespace": namespace
+                })
+        return jsonify({"success": True, "deployments": matching_deployments})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# POST 方法 - 创建类
+@app.route('/api/clusters', methods=['POST'])
+def add_cluster():
+    """添加新集群"""
+    data = request.json
+    cluster_id = data['name']
+    k8s_controller = data.get('k8s_controller', 'SSH')
+
+    # 先初始化客户端，避免反复创建
+    try:
+        client = K8sClientSvc(
+            namespace=data.get('namespace', 'default'),
+            k8s_controller=k8s_controller,
+            ssh_config=data.get('ssh_config'),
+            kube_config=data.get('kube_config')
+        )
+    except Exception as e:
+        return jsonify({"success": False, "error": f"初始化集群客户端失败: {e}"}), 500
+
+    # 添加到内存中的集群字典
+    clusters[cluster_id] = data
+
+    # 保存到YAML文件
+    if save_clusters(clusters):
+        clients[cluster_id] = client
+        return jsonify({"success": True, "cluster_id": cluster_id})
+    else:
+        # 如果保存失败，从内存中移除
+        del clusters[cluster_id]
+        return jsonify({"success": False, "error": "保存集群配置失败"}), 500
+
+
+@app.route('/api/clusters/<cluster_id>/namespaces', methods=['POST'])
+def create_namespace(cluster_id):
+    """创建命名空间"""
+    data = request.json
+    namespace = data.get('namespace')
+
+    client, error_resp = get_cluster_client(cluster_id)
+    if error_resp:
+        return error_resp
+
+    if not namespace:
+        return jsonify({"error": "Namespace name is required"}), 400
+
+    try:
+        result = client.create_namespace(namespace)
+        return jsonify({"success": True, "message": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/clusters/<cluster_id>/deployments', methods=['POST'])
+def create_deployment(cluster_id):
+    """创建Deployment"""
+    namespace = request.args.get('namespace', 'default')
+    data = request.json
+
+    client, error_resp = get_cluster_client(cluster_id)
+    if error_resp:
+        return error_resp
+
+    try:
+        result = client.create_deployment(namespace, data)
+        return jsonify({"success": True, "message": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/clusters/<cluster_id>/deployments/<deployment_name>/update-image', methods=['POST'])
+def update_deployment_image(cluster_id, deployment_name):
+    """更新部署镜像"""
+    namespace = request.args.get('namespace', 'default')
+    data = request.json
+    image = data.get('image')
+
+    client, error_resp = get_cluster_client(cluster_id)
+    if error_resp:
+        return error_resp
+
+    if not image:
+        return jsonify({"error": "Image is required"}), 400
+
+    try:
+        result = client.update_deployment_image(namespace, deployment_name, image)
+        return jsonify({"success": True, "result": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/clusters/<cluster_id>/services', methods=['POST'])
+def create_service(cluster_id):
+    """创建Service"""
+    namespace = request.args.get('namespace', 'default')
+    data = request.json
+
+    client, error_resp = get_cluster_client(cluster_id)
+    if error_resp:
+        return error_resp
+
+    try:
+        result = client.create_service(namespace, data)
+        return jsonify({"success": True, "message": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/clusters/<cluster_id>/configmaps', methods=['POST'])
+def create_configmap(cluster_id):
+    """创建ConfigMap"""
+    namespace = request.args.get('namespace', 'default')
+    data = request.json
+
+    client, error_resp = get_cluster_client(cluster_id)
+    if error_resp:
+        return error_resp
+
+    try:
+        result = client.create_configmap(namespace, data)
+        return jsonify({"success": True, "message": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/clusters/<cluster_id>/ingresses', methods=['POST'])
+def create_ingress(cluster_id):
+    """创建Ingress"""
+    namespace = request.args.get('namespace', 'default')
+    data = request.json
+
+    client, error_resp = get_cluster_client(cluster_id)
+    if error_resp:
+        return error_resp
+
+    try:
+        result = client.create_ingress(namespace, data)
+        return jsonify({"success": True, "message": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/api/clusters/<cluster_id>/yaml', methods=['POST'])
 def create_from_yaml(cluster_id):
     """从YAML创建Deployment"""
@@ -469,18 +448,106 @@ def create_from_yaml(cluster_id):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/clusters/<cluster_id>/pods/<pod_name>', methods=['DELETE'])
-def delete_pod(cluster_id, pod_name):
-    """删除Pod"""
+@app.route('/api/clusters/<cluster_id>/deployments/<deployment_name>/scale', methods=['POST'])
+def scale_deployment(cluster_id, deployment_name):
+    """伸缩容器副本数"""
     namespace = request.args.get('namespace', 'default')
+    data = request.json
+    replicas = data.get('replicas')
 
     client, error_resp = get_cluster_client(cluster_id)
     if error_resp:
         return error_resp
 
+    if replicas is None:
+        return jsonify({"error": "Replicas is required"}), 400
+
     try:
-        result = client.delete_pod(namespace, pod_name)
+        replicas = int(replicas)
+        if replicas < 0:
+            return jsonify({"error": "Replicas must be non-negative"}), 400
+    except ValueError:
+        return jsonify({"error": "Replicas must be a number"}), 400
+
+    try:
+        result = client.scale_deployment(namespace, deployment_name, replicas)
         return jsonify({"success": True, "result": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# PUT 方法 - 更新类
+@app.route('/api/clusters/<cluster_id>', methods=['PUT'])
+def update_cluster(cluster_id):
+    """更新集群信息"""
+    data = request.json
+    new_name = data.get('name')
+
+    if cluster_id not in clusters:
+        return jsonify({"error": "Cluster not found"}), 404
+
+    if not new_name:
+        return jsonify({"error": "Cluster name is required"}), 400
+
+    # 更新集群名称
+    cluster = clusters[cluster_id]
+    old_name = cluster['name']
+    cluster['name'] = new_name
+    new_cluster_id = new_name
+    # 如果集群ID是根据旧名称生成的，也需要更新
+    if cluster_id == old_name:
+        clusters[new_cluster_id] = cluster
+        del clusters[cluster_id]
+        if cluster_id in clients:
+            clients[new_cluster_id] = clients.pop(cluster_id)
+
+    # 保存到文件
+    if save_clusters(clusters):
+        return jsonify({"success": True, "cluster_id": cluster_id})
+    else:
+        # 回滚更改
+        cluster['name'] = old_name
+        if cluster_id == old_name:
+            clusters[cluster_id] = cluster
+            del clusters[new_cluster_id]
+            if new_cluster_id in clients:
+                clients[cluster_id] = clients.pop(new_cluster_id)
+        return jsonify({"success": False, "error": "保存集群配置失败"}), 500
+
+
+# DELETE 方法 - 删除类
+@app.route('/api/clusters/<cluster_id>', methods=['DELETE'])
+def delete_cluster(cluster_id):
+    """删除集群"""
+    if cluster_id not in clusters:
+        return jsonify({"error": "Cluster not found"}), 404
+
+    backup_cluster = clusters[cluster_id]
+    backup_client = clients.pop(cluster_id, None)
+    # 删除集群
+    del clusters[cluster_id]
+
+    # 保存到文件
+    if save_clusters(clusters):
+        return jsonify({"success": True})
+    else:
+        # 如果保存失败，需要恢复集群（这里简化处理，实际应该更复杂）
+        clusters[cluster_id] = backup_cluster
+        if backup_client:
+            clients[cluster_id] = backup_client
+        return jsonify({"success": False, "error": "保存集群配置失败"}), 500
+
+
+@app.route('/api/clusters/<cluster_id>/namespaces/<namespace>', methods=['DELETE'])
+def delete_namespace(cluster_id, namespace):
+    """删除命名空间"""
+    client, error_resp = get_cluster_client(cluster_id)
+    if error_resp:
+        return error_resp
+
+    try:
+        result = client.delete_namespace(namespace)
+        return jsonify({"success": True, "message": result})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -549,80 +616,17 @@ def delete_ingress(cluster_id, ingress_name):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/clusters/<cluster_id>/pods/<pod_name>/logs', methods=['GET'])
-def get_pod_logs(cluster_id, pod_name):
-    """获取Pod日志"""
+@app.route('/api/clusters/<cluster_id>/pods/<pod_name>', methods=['DELETE'])
+def delete_pod(cluster_id, pod_name):
+    """删除Pod"""
     namespace = request.args.get('namespace', 'default')
-    lines = request.args.get('lines', None)
 
     client, error_resp = get_cluster_client(cluster_id)
     if error_resp:
         return error_resp
 
     try:
-        # 将lines转换为整数，如果为空则不传
-        log_lines = int(lines) if lines else None
-        logs = client.logs(namespace, pod_name, log_lines)
-        return jsonify({"success": True, "logs": logs})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/clusters/<cluster_id>/search-deployments-by-image', methods=['GET'])
-def search_deployments_by_image(cluster_id):
-    """根据镜像名称查询工作负载"""
-    namespace = request.args.get('namespace', 'default')
-    image_name = request.args.get('image', '')
-
-    client, error_resp = get_cluster_client(cluster_id)
-    if error_resp:
-        return error_resp
-
-    if not image_name:
-        return jsonify({"error": "Image name is required"}), 400
-
-    try:
-        deoloy_images = client.get_deployment_images(namespace)
-
-        # 筛选包含指定镜像的部署
-        # 这里简化处理，实际需要根据具体情况调整
-        matching_deployments = []
-        for deoloy_image in deoloy_images:
-            if str(deoloy_image["IMAGES"]).startswith(image_name.split(":")[0]):
-                matching_deployments.append({
-                    "name": deoloy_image.get("NAME", ""),
-                    "ready": deoloy_image.get("READY", ""),
-                    "image": deoloy_image.get("IMAGES", ""),
-                    "namespace": namespace
-                })
-        return jsonify({"success": True, "deployments": matching_deployments})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/clusters/<cluster_id>/deployments/<deployment_name>/scale', methods=['POST'])
-def scale_deployment(cluster_id, deployment_name):
-    """伸缩容器副本数"""
-    namespace = request.args.get('namespace', 'default')
-    data = request.json
-    replicas = data.get('replicas')
-
-    client, error_resp = get_cluster_client(cluster_id)
-    if error_resp:
-        return error_resp
-
-    if replicas is None:
-        return jsonify({"error": "Replicas is required"}), 400
-
-    try:
-        replicas = int(replicas)
-        if replicas < 0:
-            return jsonify({"error": "Replicas must be non-negative"}), 400
-    except ValueError:
-        return jsonify({"error": "Replicas must be a number"}), 400
-
-    try:
-        result = client.scale_deployment(namespace, deployment_name, replicas)
+        result = client.delete_pod(namespace, pod_name)
         return jsonify({"success": True, "result": result})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
