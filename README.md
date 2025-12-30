@@ -1,8 +1,6 @@
 # KubeYun
 
-![KubeYun Logo](./logo.svg)
-
-KubeYun 一个即为精简的Kubernetes 集群管理平台， 支持kubeconfig 和 ssh 两种方式操控集群。
+KubeYun 一个简洁的 Kubernetes 集群管理平台， 支持 kubeconfig 和 ssh 两种方式操控集群。
 
 ## 功能特性
 
@@ -13,9 +11,6 @@ KubeYun 一个即为精简的Kubernetes 集群管理平台， 支持kubeconfig �
 - ✅ Pod 管理
 - ✅ ConfigMap 管理
 - ✅ Ingress 管理
-- ✅ 容器伸缩
-- ✅ 快速更新镜像
-- ✅ 应用YAML功能
 
 ![img1-pods](images/kube-yun-img0.png)
 ![img1-cm1](images/kube-yun-img1.png)
@@ -56,8 +51,6 @@ npm install
 
 #### 3. 开发模式运行
 
-**方式一：分别启动前后端**
-
 终端1 - 启动后端：
 ```bash
 python run.py
@@ -70,45 +63,6 @@ npm run dev
 ```
 
 访问：http://localhost:3000
-
-**方式二：仅启动后端**
-
-先构建前端：
-```bash
-cd app
-npm run build
-```
-
-然后启动后端（会自动服务前端静态文件）：
-```bash
-python run.py
-```
-
-访问：http://localhost:5000
-
-## 使用说明
-
-### 添加集群
-
-1. 点击侧边栏的 "+" 按钮
-2. 选择连接方式：
-   - **SSH**: 通过跳板机连接，需要填写 SSH 配置
-   - **KUBE**: 直接使用 kubeconfig，可填写路径或留空使用默认 `~/.kube/config`
-3. 填写集群名称和默认命名空间
-4. 根据连接方式填写相应配置
-5. 点击确定保存
-
-### 管理资源
-
-- **工作负载**: 查看、更新镜像、容器伸缩
-- **服务**: 查看服务列表
-- **Pods**: 查看、查看日志、删除
-
-## 技术栈
-
-- **前端**: Vue 3, Element Plus, Vite, Vue Router, Vuex, Axios
-- **后端**: Flask, Flask-CORS
-- **K8s**: kubernetes Python SDK, paramiko (SSH)
 
 ## 注意事项
 
