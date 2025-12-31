@@ -455,7 +455,7 @@ class K8sClientSvc:
 
 def convert2map(res: dict) -> list[dict]:
     if not res["success"]:
-        return []
+        raise Exception(res.get("error"))
     lines = res["output"].splitlines()
     if len(lines) == 0:
         return []
