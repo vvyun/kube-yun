@@ -18,6 +18,12 @@ CORS(app)  # 启用 CORS 支持
 # 配置文件路径
 CLUSTERS_CONFIG_FILE = '.clusters.yaml'
 
+# 从文件加载集群配置
+clusters = {}
+
+# 预创建每个集群的客户端，避免每个请求重复初始化
+clients = {}
+
 
 def load_clusters():
     """从YAML文件加载集群配置"""
@@ -67,29 +73,22 @@ def save_clusters(clusters_data):
         return False
 
 
-# 从文件加载集群配置
-clusters = load_clusters()
-
-# 预创建每个集群的客户端，避免每个请求重复初始化
-clients = {}
-
-
 def init_clients():
     """根据已加载的集群配置初始化客户端"""
     for cluster_id, cluster_info in clusters.items():
         try:
-            clients[cluster_id] = K8sClientSvc(
-                namespace=cluster_info.get('namespace', 'default'),
-                k8s_controller=cluster_info.get('k8s_controller', 'SSH'),
-                ssh_config=cluster_info.get('ssh_config'),
-                kube_config=cluster_info.get('kube_config')
-            )
+            if clients.get(cluster_id) and clients[cluster_id].k8s_controller == 'KUBE':
+                continue
+            else:
+                clients[cluster_id] = K8sClientSvc(
+                    namespace=cluster_info.get('namespace', 'default'),
+                    k8s_controller=cluster_info.get('k8s_controller', 'SSH'),
+                    ssh_config=cluster_info.get('ssh_config'),
+                    kube_config=cluster_info.get('kube_config')
+                )
         except Exception as e:
             # 初始化失败仅记录，相关接口会返回错误
             print(f"初始化集群客户端失败 {cluster_id}: {e}")
-
-
-init_clients()
 
 
 def get_cluster_client(cluster_id):
@@ -106,6 +105,12 @@ def get_cluster_client(cluster_id):
 @app.route('/api/clusters', methods=['GET'])
 def get_clusters():
     """获取集群列表"""
+    _clusters_ = load_clusters()
+    for item in _clusters_.items():
+        key, value = item
+        clusters[key] = value
+    # 根据已加载的集群配置初始化客户端
+    init_clients()
     return jsonify(list(clusters.values()))
 
 
@@ -631,7 +636,3 @@ def delete_pod(cluster_id, pod_name):
         return jsonify({"success": True, "result": result})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)

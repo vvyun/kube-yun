@@ -29,12 +29,6 @@
               <el-option label="TCP" value="TCP" />
               <el-option label="UDP" value="UDP" />
             </el-select>
-            <el-select placeholder="网络模式" style="width: 120px; margin-right: 10px">
-              <el-option label="NodePort(所有主机端口均可访问)" value="NodePort" />
-              <el-option label="HostPort(仅 Pod 所在主机端口可访问)" value="HostPort" />
-              <el-option label="ClusterIP(集群内部访问)" value="ClusterIP" default />
-              <el-option label="LoadBalancer(对接公有云负载均衡服务)" value="LoadBalancer" />
-            </el-select>
             <el-input v-model="port.servicePort" placeholder="主机监听端口" style="width: 120px; margin-right: 10px" />
             <el-button @click="removePort(index)" type="danger" size="small" plain>删除</el-button>
           </div>
@@ -58,6 +52,13 @@
       <el-form-item>
         <div class="volume-list">
           <div v-for="(volume, index) in formData.volumes" :key="index" class="volume-item">
+            <el-select v-model="volume.type" placeholder="卷类型" style="width: 120px; margin-right: 10px">
+              <el-option label="PVC" value="PersistentVolumeClaim" />
+              <el-option label="ConfigMap" value="ConfigMap" />
+              <el-option label="Secret" value="Secret" />
+              <el-option label="HostPath" value="HostPath" />
+            </el-select>
+            
             <el-input v-model="volume.name" placeholder="卷名" style="width: 120px; margin-right: 10px" />
             <el-input v-model="volume.mountPath" placeholder="挂载路径" style="width: 150px; margin-right: 10px" />
             <el-input v-model="volume.volumePath" placeholder="卷路径" style="width: 150px; margin-right: 10px" />

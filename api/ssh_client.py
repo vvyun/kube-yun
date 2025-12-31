@@ -58,6 +58,8 @@ class SSHClient:
                 "exit_code": stdout.channel.recv_exit_status(),
             }
         except Exception as e:
+            if str(e).__contains__("permission denied"):
+                return {"success": False, "output": "", "error": "ssh连接已断开，请刷新集群列表再重试"}
             return {"success": False, "error": str(e)}
 
     def upload_file(self, local_path, remote_path):

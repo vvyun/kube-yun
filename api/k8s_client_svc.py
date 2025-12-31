@@ -1,24 +1,23 @@
 import os
-import yaml
-import json
+import tempfile
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
+import yaml
 from kubernetes import client as k8s_client
 from kubernetes import config as k8s_config
-import tempfile
-import os
+
 from ssh_client import SSHClient
 
 
 class K8sClientSvc:
 
     def __init__(
-        self,
-        namespace="default",
-        k8s_controller="KUBE",  # 操作方式
-        ssh_config=None,
-        kube_config=None,
+            self,
+            namespace="default",
+            k8s_controller="KUBE",  # 操作方式
+            ssh_config=None,
+            kube_config=None,
     ):
         self.namespace = namespace
         self.k8s_controller = k8s_controller
@@ -90,7 +89,7 @@ class K8sClientSvc:
         return self.client.delete_pod(ns, pod_name)
 
     def update_deployment_image(
-        self, ns: str = None, deploy_name: str = None, image: str = None
+            self, ns: str = None, deploy_name: str = None, image: str = None
     ) -> str:
         if ns is None:
             ns = self.namespace
@@ -106,7 +105,7 @@ class K8sClientSvc:
         return self.client.get_deployment_images(ns)
 
     def scale_deployment(
-        self, ns: str = None, deploy_name: str = None, replicas: int = None
+            self, ns: str = None, deploy_name: str = None, replicas: int = None
     ) -> str:
         """
         伸缩容器副本数
@@ -475,18 +474,6 @@ def convert2map(res: dict) -> list[dict]:
     return ns_list
 
 
-def re_connect_if_disconnect_decorator(func):
-    """前置调用装饰器"""
-
-    def wrapper(self, *args, **kwargs):
-        # 在调用原方法前执行统一操作
-        self.re_connect_if_disconnect(func.__name__)
-        # 调用原方法
-        return func(self, *args, **kwargs)
-
-    return wrapper
-
-
 class SshK8sClient:
     def __init__(self, ssh_config):
         self.ssh_client = SSHClient(**ssh_config)
@@ -495,16 +482,6 @@ class SshK8sClient:
     def __del__(self):
         self.ssh_client.disconnect()
 
-    def re_connect_if_disconnect(self, method_name):
-        # print(method_name)
-        res = self.ssh_client.execute_command("echo 'hello world'")
-        if (
-            not res.get("success", False)
-            and res.get("error", "") == "SSH session not active"
-        ):
-            self.ssh_client.connect()
-
-    @re_connect_if_disconnect_decorator
     def get_namespace(self, ns: str) -> list[dict]:
         """
         获取命名空间
@@ -515,7 +492,6 @@ class SshK8sClient:
             return [next((item for item in result if item["NAME"] == ns), None)]
         return result
 
-    @re_connect_if_disconnect_decorator
     def get_deployments(self, ns: str) -> list[dict]:
         """
         获取部署
@@ -525,7 +501,6 @@ class SshK8sClient:
         )
         return convert2map(result)
 
-    @re_connect_if_disconnect_decorator
     def get_pods(self, ns: str) -> list[dict]:
         """
         获取Pod
@@ -533,7 +508,6 @@ class SshK8sClient:
         result = self.ssh_client.execute_command(f"kubectl get pods -n {ns}")
         return convert2map(result)
 
-    @re_connect_if_disconnect_decorator
     def get_services(self, ns: str) -> list[dict]:
         """
         获取服务
@@ -541,7 +515,6 @@ class SshK8sClient:
         result = self.ssh_client.execute_command(f"kubectl get services -n {ns}")
         return convert2map(result)
 
-    @re_connect_if_disconnect_decorator
     def logs(self, ns: str = None, pods_name: str = None, lines: int = None, since: str = None) -> str:
         args = []
         if lines:
@@ -553,7 +526,6 @@ class SshK8sClient:
         result = self.ssh_client.execute_command(cmd)
         return result["output"]
 
-    @re_connect_if_disconnect_decorator
     def get_configmaps(self, ns: str) -> list[dict]:
         """
         获取ConfigMap
@@ -561,7 +533,6 @@ class SshK8sClient:
         result = self.ssh_client.execute_command(f"kubectl get configmaps -n {ns}")
         return convert2map(result)
 
-    @re_connect_if_disconnect_decorator
     def get_ingresses(self, ns: str) -> list[dict]:
         """
         获取Ingress
@@ -569,29 +540,25 @@ class SshK8sClient:
         result = self.ssh_client.execute_command(f"kubectl get ingress -n {ns}")
         return convert2map(result)
 
-    @re_connect_if_disconnect_decorator
     def delete_pod(self, ns: str = None, pod_name: str = None) -> str:
         cmd = f"""kubectl delete pods -n {ns} {pod_name}"""
         result = self.ssh_client.execute_command(cmd)
         return result["output"]
 
-    @re_connect_if_disconnect_decorator
     def update_deployment_image(
-        self, ns: str = None, deploy_name: str = None, image: str = None
+            self, ns: str = None, deploy_name: str = None, image: str = None
     ) -> str:
         shell_cmd = f"""kubectl set image deployment/{deploy_name} {deploy_name}={image} -n {ns}"""
         result = self.ssh_client.execute_command(shell_cmd)
         return result["output"]
 
-    @re_connect_if_disconnect_decorator
     def get_deployment_images(self, ns: str = None) -> list[dict]:
         shell_cmd = f"""kubectl get deployments -n {ns} -o custom-columns=NAME:.metadata.name,IMAGES:.spec.template.spec.containers[*].image"""
         result = self.ssh_client.execute_command(shell_cmd)
         return convert2map(result)
 
-    @re_connect_if_disconnect_decorator
     def scale_deployment(
-        self, ns: str = None, deploy_name: str = None, replicas: int = None
+            self, ns: str = None, deploy_name: str = None, replicas: int = None
     ) -> str:
         """
         伸缩容器副本数
@@ -602,7 +569,6 @@ class SshK8sClient:
         result = self.ssh_client.execute_command(shell_cmd)
         return result["output"]
 
-    @re_connect_if_disconnect_decorator
     def create_namespace(self, ns: str) -> str:
         """
         创建命名空间
@@ -623,7 +589,6 @@ class SshK8sClient:
             )
         return f"命名空间 {ns} 创建成功"
 
-    @re_connect_if_disconnect_decorator
     def delete_namespace(self, ns: str) -> str:
         """
         删除命名空间
@@ -644,7 +609,6 @@ class SshK8sClient:
             )
         return f"命名空间 {ns} 删除成功"
 
-    @re_connect_if_disconnect_decorator
     def get_deployment_detail(self, deploy_name: str, ns: str) -> dict:
         """
         获取Deployment详情
@@ -666,7 +630,6 @@ class SshK8sClient:
         deployment_yaml = yaml.safe_load(result["output"])
         return deployment_yaml
 
-    @re_connect_if_disconnect_decorator
     def get_service_detail(self, service_name: str, ns: str) -> dict:
         """
         获取Service详情
@@ -688,7 +651,6 @@ class SshK8sClient:
         service_yaml = yaml.safe_load(result["output"])
         return service_yaml
 
-    @re_connect_if_disconnect_decorator
     def get_configmap_detail(self, configmap_name: str, ns: str) -> dict:
         """
         获取ConfigMap详情
@@ -710,7 +672,6 @@ class SshK8sClient:
         configmap_yaml = yaml.safe_load(result["output"])
         return configmap_yaml
 
-    @re_connect_if_disconnect_decorator
     def get_ingress_detail(self, ingress_name: str, ns: str) -> dict:
         """
         获取Ingress详情
@@ -732,7 +693,6 @@ class SshK8sClient:
         ingress_yaml = yaml.safe_load(result["output"])
         return ingress_yaml
 
-    @re_connect_if_disconnect_decorator
     def delete_deployment(self, deploy_name: str, ns: str) -> str:
         """
         删除Deployment
@@ -753,7 +713,6 @@ class SshK8sClient:
 
         return result["output"]
 
-    @re_connect_if_disconnect_decorator
     def delete_service(self, service_name: str, ns: str) -> str:
         """
         删除Service
@@ -774,7 +733,6 @@ class SshK8sClient:
 
         return result["output"]
 
-    @re_connect_if_disconnect_decorator
     def delete_configmap(self, configmap_name: str, ns: str) -> str:
         """
         删除ConfigMap
@@ -795,7 +753,6 @@ class SshK8sClient:
 
         return result["output"]
 
-    @re_connect_if_disconnect_decorator
     def delete_ingress(self, ingress_name: str, ns: str) -> str:
         """
         删除Ingress
@@ -816,28 +773,24 @@ class SshK8sClient:
 
         return result["output"]
 
-    @re_connect_if_disconnect_decorator
     def create_service(self, ns: str, service_yaml: str) -> str:
         """
         创建Service - 通过表单数据
         """
         return self.apply_yaml(ns, service_yaml)
 
-    @re_connect_if_disconnect_decorator
     def create_configmap(self, ns: str, configmap_yaml: str) -> str:
         """
         创建ConfigMap - 通过表单数据
         """
         return self.apply_yaml(ns, configmap_yaml)
 
-    @re_connect_if_disconnect_decorator
     def create_ingress(self, ns: str, ingress_yaml: str) -> str:
         """
         创建Ingress - 通过表单数据
         """
         return self.apply_yaml(ns, ingress_yaml)
 
-    @re_connect_if_disconnect_decorator
     def create_deployment(self, ns: str, deployment_yaml: str) -> str:
         """
         创建Deployment - 通过表单数据
@@ -1014,8 +967,8 @@ class KubeK8sClient:
             external_ip = ""
             if svc.status.load_balancer and svc.status.load_balancer.ingress:
                 external_ip = (
-                    svc.status.load_balancer.ingress[0].ip
-                    or svc.status.load_balancer.ingress[0].hostname
+                        svc.status.load_balancer.ingress[0].ip
+                        or svc.status.load_balancer.ingress[0].hostname
                 )
             elif svc.spec.external_i_ps:
                 external_ip = ",".join(svc.spec.external_i_ps)
@@ -1051,10 +1004,10 @@ class KubeK8sClient:
         """将时间字符串转换为秒数，例如 '5m' -> 300, '1h' -> 3600"""
         if not since:
             return None
-        
+
         # 移除空格
         since = since.strip()
-        
+
         # 提取数字和单位
         if since.endswith('s'):
             multiplier = 1
@@ -1072,7 +1025,7 @@ class KubeK8sClient:
             # 默认为秒
             multiplier = 1
             number_str = since
-        
+
         try:
             number = int(number_str)
             return number * multiplier
@@ -1142,7 +1095,7 @@ class KubeK8sClient:
 
     @switch_kubeconfig_decorator
     def update_deployment_image(
-        self, ns: str = None, deploy_name: str = None, image: str = None
+            self, ns: str = None, deploy_name: str = None, image: str = None
     ) -> str:
         if not deploy_name:
             raise Exception("deploy_name 非空")
@@ -1172,7 +1125,7 @@ class KubeK8sClient:
 
     @switch_kubeconfig_decorator
     def scale_deployment(
-        self, ns: str = None, deploy_name: str = None, replicas: int = None
+            self, ns: str = None, deploy_name: str = None, replicas: int = None
     ) -> str:
         if not deploy_name:
             raise Exception("deploy_name 非空")
