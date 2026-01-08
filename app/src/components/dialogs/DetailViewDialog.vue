@@ -4,27 +4,77 @@
         <div v-loading="loading">
             <el-tabs v-model="activeTab" class="detail-tabs">
                 <el-tab-pane label="详情" name="detail">
-                    <div class="yaml-content">
-                        <pre>{{ formattedDetail }}</pre>
+                    <div class="yaml-content" v-if="!isEditing">
+                        <codemirror
+                            v-model="yamlContent"
+                            :style="{ height: '60vh', width: '100%' }"
+                            :autofocus="true"
+                            :indent-with-tab="true"
+                            :tab-size="2"
+                            :extensions="[yamlLanguage(), readOnlyExtension]"
+                        />
+                    </div>
+                    <div class="edit-content" v-else>
+                        <codemirror
+                            v-model="editedYamlContent"
+                            :style="{ height: '50vh', width: '100%' }"
+                            :autofocus="true"
+                            :indent-with-tab="true"
+                            :tab-size="2"
+                            :extensions="[yamlLanguage()]"
+                        />
+                        <div class="edit-actions" style="margin-top: 10px; text-align: right;">
+                            <el-button @click="cancelEdit">取消</el-button>
+                            <el-button type="primary" @click="showDiff">查看差异</el-button>
+                        </div>
+                    </div>
+                </el-tab-pane>
+                <el-tab-pane label="差异对比" name="diff" v-if="isShowingDiff">
+                    <div class="diff-content">
+                        <vue-diff
+                            :old-string="yamlContent"
+                            :new-string="editedYamlContent"
+                            :context="10"
+                            :theme="'github'"
+                            :height="'60vh'"
+                            style="border: 1px solid #dfe2e5; border-radius: 3px;"
+                            v-if="yamlContent && editedYamlContent"
+                        />
+                        <div v-else style="height: 60vh; display: flex; align-items: center; justify-content: center;">
+                            <el-empty description="正在加载差异..." />
+                        </div>
+                    </div>
+                    <div class="diff-actions" style="margin-top: 10px; text-align: right;">
+                        <el-button @click="hideDiff">返回编辑</el-button>
+                        <el-button type="primary" @click="applyChanges">应用</el-button>
                     </div>
                 </el-tab-pane>
             </el-tabs>
         </div>
 
         <template #footer>
-            <el-button @click="handleClose">关闭</el-button>
+            <el-button type="primary" @click="enableEdit">编辑</el-button>
+            <el-button @click="handleClose" v-if="!isEditing && !isShowingDiff">关闭</el-button>
+            <el-button @click="cancelEdit" v-else-if="isEditing">取消</el-button>
+            <el-button @click="hideDiff" v-else-if="isShowingDiff">返回</el-button>
         </template>
     </el-dialog>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Codemirror } from 'vue-codemirror'
+import { yaml } from '@codemirror/lang-yaml'
+import { EditorView } from '@codemirror/view'
+import VueDiff from 'vue-diff'
+import 'vue-diff/dist/index.css'
 import {
     getDeploymentDetail,
     getServiceDetail,
     getConfigMapDetail,
-    getIngressDetail
+    getIngressDetail,
+    createFromYaml
 } from '../../api/cluster'
 
 const props = defineProps({
@@ -45,6 +95,16 @@ const dialogVisible = ref(props.modelValue)
 const loading = ref(false)
 const detail = ref(null)
 const activeTab = ref('detail')
+
+// 编辑相关变量
+const isEditing = ref(false)
+const isShowingDiff = ref(false)
+const yamlContent = ref('')
+const editedYamlContent = ref('')
+
+// 获取 Codemirror 扩展
+const yamlLanguage = () => yaml()
+const readOnlyExtension = EditorView.editable.of(false)
 
 // 根据资源类型获取详情的函数
 const fetchDetail = async () => {
@@ -72,6 +132,8 @@ const fetchDetail = async () => {
                 throw new Error(`不支持的资源类型: ${props.resourceType}`)
         }
         detail.value = result
+        yamlContent.value = result.yaml || ''
+        editedYamlContent.value = result.yaml || ''
     } catch (error) {
         console.error(`获取${props.resourceType}详情失败:`, error)
         ElMessage.error(`获取${props.resourceType}详情失败: ${error.message || error}`)
@@ -80,12 +142,89 @@ const fetchDetail = async () => {
     }
 }
 
-// 格式化详情内容
-const formattedDetail = computed(() => {
-    if (!detail.value) return ''
-    return detail.value.yaml
-})
+// 启用编辑模式
+const enableEdit = () => {
+    isEditing.value = true
+    editedYamlContent.value = yamlContent.value
+}
 
+// 取消编辑
+const cancelEdit = () => {
+    isEditing.value = false
+    isShowingDiff.value = false
+    activeTab.value = 'detail'
+    editedYamlContent.value = yamlContent.value
+}
+
+// 显示差异对比
+const showDiff = () => {
+    if (yamlContent.value && editedYamlContent.value) {
+        // 检查内容是否相同
+        if (yamlContent.value === editedYamlContent.value) {
+            ElMessageBox.confirm(
+                '当前内容与原始内容相同，确定要查看差异吗？',
+                '内容相同',
+                {
+                    confirmButtonText: '仍要查看',
+                    cancelButtonText: '取消',
+                    type: 'info'
+                }
+            ).then(() => {
+                isShowingDiff.value = true
+                activeTab.value = 'diff'
+            }).catch(() => {
+                // 用户取消
+            })
+        } else {
+            isShowingDiff.value = true
+            activeTab.value = 'diff'
+        }
+    } else {
+        ElMessage.warning('内容尚未加载完成，请稍后再试')
+    }
+}
+
+// 隐藏差异对比
+const hideDiff = () => {
+    isShowingDiff.value = false
+    activeTab.value = 'detail'
+}
+
+// 应用更改
+const applyChanges = async () => {
+    try {
+        // 检查内容是否相同
+        if (yamlContent.value === editedYamlContent.value) {
+            ElMessage.warning('内容没有变化，无需应用')
+            return
+        }
+        
+        await ElMessageBox.confirm(
+            '确定要应用这些更改吗？此操作将更新资源。',
+            '确认应用更改',
+            {
+                confirmButtonText: '应用',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }
+        )
+        
+        // 调用应用YAML接口
+        await createFromYaml(props.clusterId, editedYamlContent.value, props.namespace)
+        ElMessage.success('资源更新成功')
+        
+        // 更新本地内容
+        yamlContent.value = editedYamlContent.value
+        
+        // 退出编辑模式
+        cancelEdit()
+    } catch (error) {
+        if (error !== 'cancel') {
+            console.error('应用更改失败:', error)
+            ElMessage.error(`应用更改失败: ${error.message || error}`)
+        }
+    }
+}
 
 // 监听属性变化，当打开对话框时获取详情
 watch(() => props.modelValue, (newVal) => {
@@ -95,6 +234,8 @@ watch(() => props.modelValue, (newVal) => {
     } else {
         detail.value = null
         activeTab.value = 'detail'
+        isEditing.value = false
+        isShowingDiff.value = false
     }
 })
 
@@ -107,7 +248,19 @@ watch(dialogVisible, (newVal) => {
 
 // 关闭对话框
 const handleClose = () => {
-    dialogVisible.value = false
+    if (isEditing.value || isShowingDiff.value) {
+        ElMessageBox.confirm('您正在编辑中，确定要关闭吗？未保存的更改将会丢失。', '确认关闭', {
+            confirmButtonText: '确定关闭',
+            cancelButtonText: '取消',
+            type: 'warning'
+        }).then(() => {
+            dialogVisible.value = false
+        }).catch(() => {
+            // 用户取消关闭
+        })
+    } else {
+        dialogVisible.value = false
+    }
 }
 </script>
 
@@ -156,5 +309,20 @@ const handleClose = () => {
 
 .detail-tabs :deep(.el-tabs__content) {
     padding: 20px 0;
+}
+
+.diff-content {
+    height: 60vh;
+    overflow: auto;
+    position: relative;
+}
+
+.edit-content {
+    height: 60vh;
+}
+
+.cm-editor {
+    border: 1px solid #ddd;
+    border-radius: 4px;
 }
 </style>
