@@ -31,14 +31,18 @@
                 </el-tab-pane>
                 <el-tab-pane label="差异对比" name="diff" v-if="isShowingDiff">
                     <div class="diff-content">
-                        <template>
-                            <Diff
-                                :prev="yamlContent"
-                                :current="editedYamlContent"
-                                :theme='theme'
-                                :height="'60vh'"
-                            />
-                        </template>
+                        <vue3-diff
+                            :old-string="yamlContent"
+                            :new-string="editedYamlContent"
+                            :context="10"
+                            :theme="'github'"
+                            :height="'60vh'"
+                            style="border: 1px solid #dfe2e5; border-radius: 3px;"
+                            v-if="yamlContent && editedYamlContent"
+                        />
+                        <div v-else style="height: 60vh; display: flex; align-items: center; justify-content: center;">
+                            <el-empty description="正在加载差异..." />
+                        </div>
                     </div>
                     <div class="diff-actions" style="margin-top: 10px; text-align: right;">
                         <el-button @click="hideDiff">返回编辑</el-button>
@@ -63,6 +67,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Codemirror } from 'vue-codemirror'
 import { yaml } from '@codemirror/lang-yaml'
 import { EditorView } from '@codemirror/view'
+import Vue3Diff from 'vue3-diff'
+import 'vue3-diff/dist/index.css'
 import {
     getDeploymentDetail,
     getServiceDetail,
